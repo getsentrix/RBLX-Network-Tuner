@@ -3300,7 +3300,7 @@ try {
 
         private string activeAdapterName = "Detecting active network adapter...";
         private string activeAdapterDetails = "IPv4: Initializing... | MTU: 1500 | Nagle: Disabled";
-        private string robloxSessionStatus = "Standby: Monitoring Roblox client transport logs...";
+        private string robloxSessionStatus = "Standby: Monitoring Roblox client...";
         private string watchdogStatus = "Standby: Waiting for RobloxPlayerBeta.exe...";
         private string bufferbloatStatus = "Bufferbloat: Not Tested (Click 'Bufferbloat Test' in Tuning or Statistics tab)";
         private bool isBufferbloatRunning = false;
@@ -3431,7 +3431,7 @@ try {
             ToolStripMenuItem itemUpdate = new ToolStripMenuItem("Check for Updates", null, delegate {
                 this.BeginInvoke((MethodInvoker)delegate { TriggerUpdateCheckGui(true); });
             });
-            ToolStripMenuItem itemExit = new ToolStripMenuItem("Reset & Exit", null, delegate { SafeExit(); });
+            ToolStripMenuItem itemExit = new ToolStripMenuItem("Exit", null, delegate { SafeExit(); });
             this.trayMenu.Items.Add(itemShow);
             this.trayMenu.Items.Add(itemUpdate);
             this.trayMenu.Items.Add(new ToolStripSeparator());
@@ -3575,7 +3575,7 @@ try {
                     else
                     {
                         watchdogStatus = "STANDBY: Waiting for RobloxPlayerBeta.exe launch...";
-                        robloxSessionStatus = "Standby: Monitoring Roblox client transport logs...";
+                        robloxSessionStatus = "Standby: Monitoring Roblox client...";
                     }
                 }
                 this.Invalidate();
@@ -3841,7 +3841,7 @@ try {
                                     isTuningApplied = false;
                                     tuneBtnText = "TUNE NOW";
                                     this.Invalidate();
-                                    MessageBox.Show(this, "Windows network defaults and baseline settings have been fully restored.", "Defaults Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                    MessageBox.Show(this, "Windows network defaults fully restored.", "Defaults Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
                                 });
                             }
                             catch { }
@@ -3888,7 +3888,7 @@ try {
                         this.Hide();
                         if (this.trayIcon != null)
                         {
-                            this.trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Running in background.", ToolTipIcon.Info);
+                            this.trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Collapsed to system tray.", ToolTipIcon.Info);
                         }
                         return;
                     }
@@ -4150,7 +4150,7 @@ try {
             using (Font fEngStat = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bEngStat = new SolidBrush(statCol))
             {
-                g.DrawString(isTuningApplied ? "ENGINE ACTIVE" : "STANDBY", fEngStat, bEngStat, 32, statDotY - 2);
+                g.DrawString(isTuningApplied ? "ACTIVE" : "STANDBY", fEngStat, bEngStat, 32, statDotY - 2);
             }
 
             // GitHub link pill in sidebar
@@ -4175,10 +4175,10 @@ try {
             }
 
             // Breadcrumb title in header
-            string breadcrumb = "OVERVIEW  /  SYSTEM DASHBOARD";
-            if (activeTab == NavTab.Tuning) breadcrumb = "TUNING  /  KERNEL & SOCKET ENGINE";
-            else if (activeTab == NavTab.Statistics) breadcrumb = "STATISTICS  /  TELEMETRY & BOTTLENECK ISOLATION";
-            else if (activeTab == NavTab.Settings) breadcrumb = "SETTINGS  /  APPLICATION CONFIGURATION";
+            string breadcrumb = "OVERVIEW  /  DASHBOARD";
+            if (activeTab == NavTab.Tuning) breadcrumb = "TUNING  CONFIGURATION";
+            else if (activeTab == NavTab.Statistics) breadcrumb = "STATISTICS";
+            else if (activeTab == NavTab.Settings) breadcrumb = "SETTINGS";
 
             using (Font fBread = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bBread = new SolidBrush(Color.FromArgb(100, 116, 139)))
@@ -4289,7 +4289,7 @@ try {
             }
 
             // Status Texts
-            string optTitle = isTuningApplied ? "Optimized for Roblox" : "Ready to Tune";
+            string optTitle = isTuningApplied ? "Optimized Successfully" : "Not Optimized";
             using (Font fOptHead = new Font("Segoe UI", 12.0f, FontStyle.Bold))
             using (Brush bOptHead = new SolidBrush(Color.White))
             {
@@ -4380,7 +4380,7 @@ try {
             using (Font fWmark = new Font("Segoe UI", 7.5f, FontStyle.Regular))
             using (Brush bWmark = new SolidBrush(Color.FromArgb(71, 85, 105)))
             {
-                g.DrawString("github.com/getsentrix/RBLX-Network-Tuner  •  100% Reversible Windows Kernel Tuning", fWmark, bWmark, 218, 508);
+                g.DrawString("github.com/getsentrix/RBLX-Network-Tuner  •  Roblox Latency Kernel Tuning", fWmark, bWmark, 218, 508);
             }
         }
 
@@ -4465,7 +4465,7 @@ try {
             using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
             {
-                g.DrawString("HOP-BY-HOP ROUTE TELEMETRY & BOTTLENECK ISOLATION", fCardHead, bCardHead, 232, 66);
+                g.DrawString("ROUTE TELEMETRY", fCardHead, bCardHead, 232, 66);
             }
 
             Color routeColor = currentRouteHops.IsGatewayCongested ? Color.FromArgb(244, 63, 94) : (currentRouteHops.IsIspCongested ? Color.FromArgb(251, 191, 36) : Color.FromArgb(52, 211, 153));
@@ -4504,7 +4504,7 @@ try {
             using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
             {
-                string gTitle = isLiveGameServer ? "LIVE GAME SERVER PACKET PACING (REAL-TIME RTT WAVEFORM)" : "LIVE ROBLOX EDGE TELEMETRY & JITTER PACER";
+                string gTitle = isLiveGameServer ? "LIVE GAME SERVER PACKET PACING (REAL-TIME RTT WAVEFORM)" : "PING;
                 g.DrawString(gTitle, fCardHead, bCardHead, 232, 172);
             }
 
@@ -4550,7 +4550,7 @@ try {
             using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
             {
-                g.DrawString("BUFFERBLOAT DIAGNOSTIC & COMPETING PROCESS WATCHDOG", fCardHead, bCardHead, 232, 362);
+                g.DrawString("BUFFERBLOAT DIAGNOSTIC", fCardHead, bCardHead, 232, 362);
             }
 
             using (Font fStat = new Font("Segoe UI", 8.0f, FontStyle.Regular))
@@ -4588,7 +4588,7 @@ try {
             using (Font fSub = new Font("Segoe UI", 7.5f, FontStyle.Regular))
             using (Brush bSub = new SolidBrush(Color.FromArgb(100, 116, 139)))
             {
-                g.DrawString("High-performance zero-dependency C# native latency & jitter optimization engine for competitive Roblox gameplay.", fSub, bSub, 232, 108);
+                g.DrawString("High-performance latency optimization for competitive Roblox gameplay.", fSub, bSub, 232, 108);
             }
 
             Color btnGhBg = hoverBtnSettingsGithub ? Color.FromArgb(28, 36, 50) : Color.FromArgb(18, 24, 36);
@@ -4627,7 +4627,7 @@ try {
             using (Font fSafeDesc = new Font("Segoe UI", 7.5f, FontStyle.Regular))
             using (Brush bSafeDesc = new SolidBrush(Color.FromArgb(148, 163, 184)))
             {
-                g.DrawString("Every modified registry key, QoS policy, timer resolution, and network adapter setting is backed up in memory\nand guaranteed to restore to baseline when Roblox exits or when you close the tuner.", fSafeDesc, bSafeDesc, 232, 336);
+                g.DrawString("Every modified registry key, QoS policy, timer resolution, and network adapter setting is backed up in memory\nand guaranteed to restore to factory defaults when Roblox exits or when you close the tuner.", fSafeDesc, bSafeDesc, 232, 336);
             }
 
             Color btnVerBg = hoverBtnVerify ? Color.FromArgb(28, 36, 50) : Color.FromArgb(18, 24, 36);
