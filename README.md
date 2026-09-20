@@ -17,39 +17,48 @@ A lightweight Windows tool designed to eliminate random ping spikes, jitter, and
 
 Even with high-speed internet, Roblox players frequently deal with random rubberbanding, ping spikes, and delayed hits. Most of the time, the culprit isn't your internet speed—it's how Windows handles background tasks by default:
 
-* **Background Wi-Fi Scans**: Every 60 seconds, Windows secretly scans for nearby Wi-Fi networks in the background. While your network card is scanning, game traffic freezes for 100–300ms, causing sudden ping spikes and rubberbanding.
-* **Sluggish System Timer**: Windows defaults to a slow 15.6ms system timer (64 Hz), meaning game network packets sit waiting in queues before Windows wakes up to process them.
-* **Windows 11 CPU Throttling (EcoQoS)**: Windows often decides Roblox is using too much power and shoves it onto low-power efficiency cores (E-cores), causing sudden stuttering and frame drops.
-* **Socket Buffering**: Windows network buffers hold onto UDP packets briefly to batch them instead of sending them out the instant Roblox fires them.
+* **Background Wi-Fi Scans**: Every 60 seconds, Windows scans for nearby Wi-Fi networks in the background. While your network card is scanning, game traffic can pause for 100–300ms, causing sudden ping spikes and rubberbanding.
+* **Sluggish System Timer**: Windows defaults to a slow 15.6ms system timer (64 Hz), meaning game network threads can wait up to 15ms in scheduling queues before Windows wakes up to dispatch them.
+* **Windows 11 CPU Throttling (EcoQoS)**: Windows often decides Roblox background or child worker threads are using too much power and shoves them onto low-power efficiency cores (E-cores), causing sudden stuttering and frame drops.
+* **Socket Buffering & Power States**: Standard Winsock AFD buffers hold onto UDP packets briefly to batch them instead of sending them out immediately, while Energy Efficient Ethernet (EEE) puts the physical network adapter to sleep between packet bursts.
 
-Roblox Network Tuner temporarily tunes these settings while you play, and restores everything back to default the moment you close the game or exit the app.
+Roblox Network Tuner dynamically tunes these settings while you play, and restores everything back to default the moment you close the game or exit the app.
 
 ---
 
 ## Features
 
-### 🎯 Real In-Game Server Ping & Jitter
+### 🌐 Hop-by-Hop Route Diagnostics & Roblox Telemetry
 Most ping utilities test latency against Google (`8.8.8.8`) or Cloudflare (`1.1.1.1`), which doesn't reflect your actual game. Roblox Network Tuner reads your live Roblox game session directly from client transport logs in real time. It finds the exact game server IP and port you're playing on and displays your genuine in-game ping and RFC 3550 jitter.
 
-### 📶 Wi-Fi Lag Spike Killer
-Automatically pauses Windows background Wi-Fi scanning while in a match to stop periodic ping spikes.
-* **Built-in safety**: If your Wi-Fi signal drops below 55% or -75 dBm, the scan pause is automatically disabled so your laptop can freely switch access points without dropping connection.
+Furthermore, it runs continuous **Hop-by-Hop Route Diagnostics**:
+* **Gateway**: Pings your local router to verify Wi-Fi / LAN integrity.
+* **ISP Edge**: Probes upstream Internet transit to detect ISP congestion.
+* **Roblox Edge**: Measures live game server round-trip time.
+If you lag, the dashboard tells you immediately whether it's your home Wi-Fi (`⚠️ Gateway Lag`), an ISP routing issue (`⚠️ ISP Transit Delay`), or game server load.
+
+### 📶 Wi-Fi Lag Spike Killer with Roaming Guard
+Automatically pauses Windows background Wi-Fi scanning while in a match to eliminate periodic ping spikes.
+* **Built-in roaming safety**: If your Wi-Fi signal drops below 55% or -75 dBm, scan suppression is automatically disabled so your device can freely roam to a closer access point or mesh node without dropping connection.
 * **Ethernet aware**: If you're on a wired connection, Wi-Fi tweaks are completely bypassed in favor of low-latency NDIS queue settings.
 
-### ⏱️ 0.50ms Hardware Timer
-Tightens the Windows interrupt timer from 15.6ms down to **0.50ms (2000 Hz)** globally. Packets and frame inputs process immediately with near-zero scheduling quantization.
+### ⏱️ 0.50ms Kernel Thread Dispatch Timer
+Requests a **0.50ms (2000 Hz)** scheduling timer resolution via `NtSetTimerResolution`. Reduces OS thread scheduling quantization so input events, packet arrival callbacks, and rendering frames process with minimal dispatch delay.
 
 ### 🚀 UDP Fast Path (AFD Datagram Thresholds)
-Locks Winsock datagram buffers to route packets up to MTU size directly onto the kernel fast I/O path. Eliminates socket queuing delays during chaotic combat and heavy physics replication.
+Roblox physics, character movement, and real-time multiplayer replication communicate over UDP (RakNet / UDMUX), while universe assets and textures stream over TCP/HTTPS. Setting `FastSendDatagramThreshold=1500` and `FastCopyReceiveThreshold=1500` instructs the Winsock AFD subsystem to bypass intermediate kernel buffer copies for full-sized UDP MTU packets.
 
 ### ⚡ No CPU or Power Throttling
-Automatically boosts Roblox's CPU priority to High, sets I/O priority to High, and explicitly disables Windows 11 EcoQoS (Efficiency Mode) to keep the game running on performance cores.
+Automatically boosts Roblox's CPU priority to High, sets I/O priority to High, and explicitly disables Windows 11 EcoQoS (Efficiency Mode) to keep the game running on performance cores. Also temporarily disables Energy Efficient Ethernet (Green Ethernet) during active play so physical adapters don't enter sleep states during quiet game moments.
+
+### 🔍 Background Bandwidth Contention Watchdog
+Scans for active background bandwidth hogs—such as OneDrive sync, Steam downloads, Epic Games, BitTorrent clients, and Windows Update. Alerts you on the dashboard when competing network traffic is saturating your connection.
 
 ### 📊 Built-in Bufferbloat Diagnostic
 Click **[Bufferbloat Test]** in the app or run `--bufferbloat` in terminal. It runs a controlled 5MB network burst to test your ping under load versus idle. If your latency spikes by more than 30ms under load, it diagnoses router queuebloat and gives you straightforward advice on router Smart Queue Management (SQM / CAKE) rather than claiming PC tweaks can fix a crowded home router.
 
 ### 🛡️ 100% Safe & Reversible
-* Every change is backed up to a local snapshot before anything is applied.
+* Every change is backed up to a local snapshot (`tuner_state.json`) before anything is applied.
 * As soon as Roblox exits or you click **[Reset & Exit]**, all registry keys, services, and timers automatically revert to stock Windows defaults.
 * Even if your PC crashes or loses power, the tuner detects the previous session on next launch and cleans everything up automatically.
 
@@ -128,11 +137,12 @@ For systems engineers and curious players, here are the exact parameters modifie
 * **Process Priority**: `SetPriorityClass` to `HIGH_PRIORITY_CLASS`, `NtSetInformationProcess` for `IoPriorityHigh`, `SetProcessInformation` disabling `PROCESS_POWER_THROTTLING_EXECUTION_SPEED`.
 * **TCP/IP Interface (Active GUID only)**:
   * `TcpAckFrequency` = 1, `TCPNoDelay` = 1, `TcpDelAckTicks` = 0
-* **QoS Expedited Forwarding**: Policy-based DSCP 46 tagged specifically on `RobloxPlayerBeta.exe`. Tested and validated for packet loss on connection; auto-reverted if ISP deprioritizes non-zero DSCP tags.
+* **QoS Expedited Forwarding**: Policy-based DSCP 46 tagged specifically on `RobloxPlayerBeta.exe`. Tested and validated continuously; auto-reverted if ISP deprioritizes non-zero DSCP tags (packet loss > 15% or latency degradation > 8ms).
+* **Adapter Power Management**: Disables Energy Efficient Ethernet (`*EEE`) and Green Ethernet during gameplay to eliminate physical PHY sleep-state wake latency.
 * **MMCSS Profile**: `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile`
   * `NetworkThrottlingIndex` = 0xFFFFFFFF, `SystemResponsiveness` = 0
 
-All keys are stored in `tuner_state.json` and reverted symmetrically upon session termination.
+All keys and adapter properties are stored in `tuner_state.json` and reverted symmetrically upon session termination.
 </details>
 
 ---

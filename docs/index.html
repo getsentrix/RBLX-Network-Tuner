@@ -109,7 +109,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          <span>0.50ms Hardware Timer</span>
+          <span>0.50ms Timer Dispatch</span>
         </div>
         <div class="hero-stat-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -282,9 +282,9 @@
               <line x1="12" y1="20" x2="12.01" y2="20"></line>
             </svg>
           </div>
-          <h3 class="pillar-title">Adaptive Profile Detection</h3>
+          <h3 class="pillar-title">Adaptive Profile & Power Steering</h3>
           <p class="pillar-desc">
-            Automatically distinguishes whether you are on Wi-Fi or Ethernet. Ethernet connections bypass wireless commands and receive gigabit low-latency NDIS queue steering.
+            Automatically distinguishes Wi-Fi vs. Ethernet. Bypasses wireless scanning on wired connections and temporarily disables Energy Efficient Ethernet (EEE) to eliminate physical interface sleep latency.
           </p>
           <span class="pillar-tag">NetworkProfileDetector.cs</span>
         </div>
@@ -298,11 +298,11 @@
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Live Roblox Server Telemetry</h3>
+          <h3 class="pillar-title">Hop-by-Hop Route Diagnostics</h3>
           <p class="pillar-desc">
-            Non-locking real-time parser tails client logs to identify active UDMUX/RCC addresses and datacenter IDs. Telemetry benchmarks measure the actual game server, not random CDNs.
+            Non-locking parser tails live Roblox client logs to identify active game server IPs. Concurrently probes Gateway, ISP Edge, and Game Server hops to pinpoint the exact source of any latency spike.
           </p>
-          <span class="pillar-tag">RobloxGameSessionTracker.cs</span>
+          <span class="pillar-tag">RouteHopMonitor.cs</span>
         </div>
 
         <!-- 3 -->
@@ -314,9 +314,9 @@
               <path d="M6 20v-6"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Bufferbloat Diagnostic Engine</h3>
+          <h3 class="pillar-title">Bufferbloat & Contention Engine</h3>
           <p class="pillar-desc">
-            Evaluates baseline idle RTT vs. loaded RTT during a 5MB network burst. Assigns grades from A+ down to F and provides actionable router Smart Queue Management (SQM/CAKE) diagnostics.
+            Evaluates baseline idle RTT vs. loaded RTT during a 5MB burst with A+ to F grading, while an active watchdog monitors competing background hogs (OneDrive, Steam, Epic, Torrents).
           </p>
           <span class="pillar-tag">BufferbloatDiagnosticModule.cs</span>
         </div>
@@ -328,9 +328,9 @@
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Selective Signal-Aware Wi-Fi</h3>
+          <h3 class="pillar-title">Signal-Aware Wi-Fi Roaming Guard</h3>
           <p class="pillar-desc">
-            Monitors Wi-Fi signal quality and RSSI in real time. If signal drops below 55% (-75 dBm), roaming scan suppression is automatically bypassed to avoid connection dropouts.
+            Monitors Wi-Fi signal quality and RSSI in real time. If signal drops below 55% (-75 dBm), roaming scan suppression is automatically disengaged so your device seamlessly roams without disconnecting.
           </p>
           <span class="pillar-tag">WifiOptimizationModule.cs</span>
         </div>
@@ -342,9 +342,9 @@
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Evidence-Based QoS Verification</h3>
+          <h3 class="pillar-title">Audited QoS & UDP Fast Path</h3>
           <p class="pillar-desc">
-            Applies DSCP 46 Expedited Forwarding specifically to Roblox traffic, then audits gateway and ISP response. If packet loss or deprioritization is detected, it auto-reverts instantly.
+            Applies DSCP 46 Expedited Forwarding to Roblox UDP packets with automated ISP degradation audits (auto-reverting if loss >15%), paired with Winsock AFD 1500-byte datagram buffer thresholds.
           </p>
           <span class="pillar-tag">QosVerificationModule.cs</span>
         </div>
@@ -394,22 +394,27 @@
               <tr>
                 <td class="comp-feature">Kernel Multimedia Timer Resolution</td>
                 <td class="comp-stock">15.625 ms (Power-saving lazy quantum)</td>
-                <td class="comp-tuned">0.500 ms (Hardware high-precision timer)</td>
+                <td class="comp-tuned">0.500 ms (NtSetTimerResolution dispatch request)</td>
+              </tr>
+              <tr>
+                <td class="comp-feature">Hop-by-Hop Route Bottleneck Isolation</td>
+                <td class="comp-stock">Blind to gateway vs. ISP vs. server lag</td>
+                <td class="comp-tuned">Real-time probe (Gateway ──▶ ISP ──▶ Roblox)</td>
               </tr>
               <tr>
                 <td class="comp-feature">Wi-Fi Background Network Scanning</td>
                 <td class="comp-stock">Runs every 60s (causes 100–300ms spikes)</td>
-                <td class="comp-tuned">Locked during active play; auto-resumes on exit</td>
+                <td class="comp-tuned">Suppressed during play with low-signal roaming guard</td>
               </tr>
               <tr>
                 <td class="comp-feature">Winsock AFD UDP Datagram Threshold</td>
-                <td class="comp-stock">Dynamic kernel copy buffering</td>
-                <td class="comp-tuned">FastSend / FastCopy at 1500 bytes (zero copy)</td>
+                <td class="comp-stock">Dynamic intermediate kernel copy buffering</td>
+                <td class="comp-tuned">FastSend / FastCopy at 1500 bytes (MTU threshold)</td>
               </tr>
               <tr>
-                <td class="comp-feature">Windows 11 EcoQoS Power Throttling</td>
-                <td class="comp-stock">Active (may throttle background threads)</td>
-                <td class="comp-tuned">Disabled via SetProcessInformation API</td>
+                <td class="comp-feature">Windows 11 EcoQoS & Adapter Sleep</td>
+                <td class="comp-stock">Roblox throttled to E-cores; EEE sleeps PHY</td>
+                <td class="comp-tuned">EcoQoS disabled; EEE sleep wake-latency prevented</td>
               </tr>
               <tr>
                 <td class="comp-feature">TCP/IP Packet Acknowledgement</td>
@@ -419,7 +424,7 @@
               <tr>
                 <td class="comp-feature">QoS Packet Tagging</td>
                 <td class="comp-stock">Best Effort (DSCP 0 unprioritized)</td>
-                <td class="comp-tuned">DSCP 46 Expedited Forwarding (verified)</td>
+                <td class="comp-tuned">DSCP 46 Expedited Forwarding (continuously audited)</td>
               </tr>
               <tr>
                 <td class="comp-feature">Restoration & Persistence</td>
@@ -548,10 +553,10 @@
             <div class="checksum-box">
               <div class="checksum-header">
                 <span>SHA-256 Verification Hash</span>
-                <button class="copy-hash-btn" data-copy="872BB0A0FAA3756153E34852193B0EBB433CC065B9436885E6B7B14D72FB3A08">Copy Hash</button>
+                <button class="copy-hash-btn" data-copy="C1B8EB4359C796199E74E2B7FA2E2C3E04B82A15336E914B8CAF56A08CC33933">Copy Hash</button>
               </div>
               <div class="checksum-val">
-                <span>872BB0A0FAA3756153E34852193B0EBB433CC065B9436885E6B7B14D72FB3A08</span>
+                <span>C1B8EB4359C796199E74E2B7FA2E2C3E04B82A15336E914B8CAF56A08CC33933</span>
               </div>
             </div>
           </div>
@@ -563,7 +568,7 @@
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Download Installer (128 KB)
+              Download Installer (131 KB)
             </a>
           </div>
         </div>
@@ -580,10 +585,10 @@
             <div class="checksum-box">
               <div class="checksum-header">
                 <span>SHA-256 Verification Hash</span>
-                <button class="copy-hash-btn" data-copy="678F5D960F7FCDD3CA1A74FB4F703E8166B5B6DCA63EC5F25D4151A901B99C10">Copy Hash</button>
+                <button class="copy-hash-btn" data-copy="65C17A5067011D327B440F6E17884EDF81564866D3C4F2CA83A8108F0C1EC880">Copy Hash</button>
               </div>
               <div class="checksum-val">
-                <span>678F5D960F7FCDD3CA1A74FB4F703E8166B5B6DCA63EC5F25D4151A901B99C10</span>
+                <span>65C17A5067011D327B440F6E17884EDF81564866D3C4F2CA83A8108F0C1EC880</span>
               </div>
             </div>
           </div>
@@ -595,7 +600,7 @@
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Download Portable (132 KB)
+              Download Portable (139 KB)
             </a>
           </div>
         </div>
@@ -666,7 +671,7 @@
           </div>
           <div class="faq-body">
             <p>
-              Yes. The <strong>Adaptive Profile Detector</strong> recognizes your connection medium. While Wi-Fi users benefit from scan freezing and media streaming locks, Ethernet users benefit from 0.50ms hardware timer resolution, Winsock AFD zero-copy UDP buffering, TCP delayed ACK suppression, and low-latency NDIS queue pacing.
+              Yes. The <strong>Adaptive Profile & Power Steering</strong> module recognizes your connection medium. While Wi-Fi users benefit from roaming-safe scan freezing, Ethernet users benefit from 0.50ms kernel thread timer resolution, Winsock AFD UDP datagram threshold tuning, TCP delayed ACK suppression, and Energy Efficient Ethernet (EEE) sleep latency prevention.
             </p>
           </div>
         </div>
