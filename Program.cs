@@ -13,6 +13,7 @@ using System.ServiceProcess;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -28,8 +29,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.6.0")]
-[assembly: AssemblyFileVersion("2.4.6.0")]
+[assembly: AssemblyVersion("2.4.7.0")]
+[assembly: AssemblyFileVersion("2.4.7.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2881,7 +2882,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.6";
+        public const string CurrentVersion = "2.4.7";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -3551,6 +3552,7 @@ try {
                 }
 
                 System.Windows.Application app = new System.Windows.Application();
+                app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
                 app.DispatcherUnhandledException += delegate(object s, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs exArgs)
                 {
                     try
@@ -3561,7 +3563,16 @@ try {
                     catch { }
                     exArgs.Handled = true;
                 };
-                app.Run(new TunerWpfWindow());
+
+                TunerWpfWindow mainWindow = new TunerWpfWindow();
+                mainWindow.Closed += delegate
+                {
+                    try { app.Shutdown(); } catch { }
+                };
+
+                SplashWindow splash = new SplashWindow(mainWindow, app);
+                splash.Show();
+                app.Run();
             }
         }
 
@@ -4010,16 +4021,18 @@ try {
         private static void ApplyGlobalTcpSettings(TunerState state)
         {
             Console.Write(" [*] Global TCP stack: RSC disabled, CUBIC congestion, DCA enabled ... ");
-            RunSilent("netsh.exe", "int tcp set global rsc=disabled");
-            RunSilent("netsh.exe", "int tcp set global autotuninglevel=normal");
-            RunSilent("netsh.exe", "int tcp set global fastopen=enabled");
-            RunSilent("netsh.exe", "int tcp set global timestamps=disabled");
-            RunSilent("netsh.exe", "int tcp set global ecncapability=disabled");
-            RunSilent("netsh.exe", "int tcp set global initialrto=1000");
-            RunSilent("netsh.exe", "int tcp set global rss=enabled");
-            RunSilent("netsh.exe", "int tcp set supplemental template=internet congestionprovider=cubic");
-            RunSilent("netsh.exe", "int tcp set supplemental template=compat congestionprovider=cubic");
-            RunSilent("netsh.exe", "int tcp set supplemental template=datacenterext congestionprovider=cubic");
+            Parallel.Invoke(
+                delegate { RunSilent("netsh.exe", "int tcp set global rsc=disabled"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global autotuninglevel=normal"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global fastopen=enabled"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global timestamps=disabled"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global ecncapability=disabled"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global initialrto=1000"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global rss=enabled"); },
+                delegate { RunSilent("netsh.exe", "int tcp set supplemental template=internet congestionprovider=cubic"); },
+                delegate { RunSilent("netsh.exe", "int tcp set supplemental template=compat congestionprovider=cubic"); },
+                delegate { RunSilent("netsh.exe", "int tcp set supplemental template=datacenterext congestionprovider=cubic"); }
+            );
 
             try
             {
@@ -4113,8 +4126,10 @@ try {
         private static void ApplyServicesAndCaches(TunerState state)
         {
             Console.Write(" [*] Flush DNS resolver and purge ARP cache tables .................... ");
-            RunSilent("ipconfig.exe", "/flushdns");
-            RunSilent("netsh.exe", "interface ip delete arpcache");
+            Parallel.Invoke(
+                delegate { RunSilent("ipconfig.exe", "/flushdns"); },
+                delegate { RunSilent("netsh.exe", "interface ip delete arpcache"); }
+            );
             PrintSuccess("DONE");
         }
 
@@ -4137,12 +4152,14 @@ try {
         public static void RevertGlobalTcpAndQos()
         {
             RemoveQosPolicyDirect();
-            RunSilent("netsh.exe", "int tcp set global rsc=enabled");
-            RunSilent("netsh.exe", "int tcp set global timestamps=allowed");
-            RunSilent("netsh.exe", "int tcp set supplemental template=internet congestionprovider=default");
-            RunSilent("netsh.exe", "int tcp set supplemental template=compat congestionprovider=default");
-            RunSilent("netsh.exe", "int tcp set supplemental template=datacenterext congestionprovider=default");
-            RunSilent("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"Set-NetOffloadGlobalSetting -PacketCoalescingFilter Enabled -ReceiveSegmentCoalescing Enabled -Confirm:$false\"");
+            Parallel.Invoke(
+                delegate { RunSilent("netsh.exe", "int tcp set global rsc=enabled"); },
+                delegate { RunSilent("netsh.exe", "int tcp set global timestamps=allowed"); },
+                delegate { RunSilent("netsh.exe", "int tcp set supplemental template=internet congestionprovider=default"); },
+                delegate { RunSilent("netsh.exe", "int tcp set supplemental template=compat congestionprovider=default"); },
+                delegate { RunSilent("netsh.exe", "int tcp set supplemental template=datacenterext congestionprovider=default"); },
+                delegate { RunSilent("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"Set-NetOffloadGlobalSetting -PacketCoalescingFilter Enabled -ReceiveSegmentCoalescing Enabled -Confirm:$false\""); }
+            );
         }
 
         internal static void RestoreAll()

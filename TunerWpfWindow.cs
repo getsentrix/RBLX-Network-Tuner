@@ -521,6 +521,9 @@ namespace RobloxNetworkTuner
         private SparklineVectorCanvas sparkJitter;
 
         // Optimization Status Elements
+        private Border statusCard;
+        private Border statusCircle;
+        private TextBlock statusCheckIcon;
         private TextBlock txtOptTitle;
         private TextBlock txtOptSub;
         private TextBlock txtRobloxStatus;
@@ -600,6 +603,7 @@ namespace RobloxNetworkTuner
             this.Background = new SolidColorBrush(Colors.Transparent);
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             this.ResizeMode = ResizeMode.NoResize;
+            this.Opacity = 0.0;
 
             InitTelemetryHistories();
             BuildUi();
@@ -618,13 +622,12 @@ namespace RobloxNetworkTuner
             // Setup Tray Icon
             SetupSystemTray();
 
-            // Smooth Window Fade-In
-            DoubleAnimation fadeIn = new DoubleAnimation(0.0, 1.0, new Duration(TimeSpan.FromMilliseconds(200)));
-            this.BeginAnimation(Window.OpacityProperty, fadeIn);
-
-            // Initial async checks
+            // Smooth Window Fade-In on Loaded
             this.Loaded += delegate
             {
+                DoubleAnimation fadeIn = new DoubleAnimation(0.0, 1.0, new Duration(TimeSpan.FromMilliseconds(220)));
+                fadeIn.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                this.BeginAnimation(Window.OpacityProperty, fadeIn);
                 TriggerBackgroundChecks();
             };
         }
@@ -951,7 +954,7 @@ namespace RobloxNetworkTuner
             grid.Children.Add(topCards);
 
             // Row 1: Optimization Status Card
-            Border statusCard = new Border();
+            statusCard = new Border();
             Grid.SetRow(statusCard, 1);
             statusCard.Margin = new Thickness(0, 12, 0, 12);
             statusCard.CornerRadius = new CornerRadius(10);
@@ -966,18 +969,18 @@ namespace RobloxNetworkTuner
             statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(164) });
 
             // Check Circle
-            Border circle = new Border();
-            circle.Width = 46;
-            circle.Height = 46;
-            circle.CornerRadius = new CornerRadius(23);
-            circle.Background = new SolidColorBrush(Color.FromRgb(6, 40, 28));
-            circle.BorderBrush = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-            circle.BorderThickness = new Thickness(1.5);
-            circle.HorizontalAlignment = HorizontalAlignment.Left;
-            circle.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock chk = new TextBlock { Text = "✓", FontSize = 19, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            circle.Child = chk;
-            statusGrid.Children.Add(circle);
+            statusCircle = new Border();
+            statusCircle.Width = 46;
+            statusCircle.Height = 46;
+            statusCircle.CornerRadius = new CornerRadius(23);
+            statusCircle.Background = new SolidColorBrush(Color.FromRgb(6, 40, 28));
+            statusCircle.BorderBrush = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+            statusCircle.BorderThickness = new Thickness(1.5);
+            statusCircle.HorizontalAlignment = HorizontalAlignment.Left;
+            statusCircle.VerticalAlignment = VerticalAlignment.Center;
+            statusCheckIcon = new TextBlock { Text = "✓", FontSize = 19, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            statusCircle.Child = statusCheckIcon;
+            statusGrid.Children.Add(statusCircle);
 
             // Status Texts
             StackPanel statTxtStack = new StackPanel();
@@ -1617,15 +1620,32 @@ namespace RobloxNetworkTuner
 
                     this.Dispatcher.BeginInvoke(new Action(delegate
                     {
-                        txtOptTitle.Text = isTuningApplied ? "Optimized Successfully" : "Not Optimized";
+                        if (!isTuningInProgress)
+                        {
+                            txtOptTitle.Text = isTuningApplied ? "Optimized Successfully" : "Not Optimized";
+                            txtOptTitle.Foreground = new SolidColorBrush(Colors.White);
+                            if (btnTuneNow != null)
+                            {
+                                btnTuneNow.Text = isTuningApplied ? "TUNED ✓" : "TUNE NOW";
+                            }
+                            if (statusCheckIcon != null)
+                            {
+                                statusCheckIcon.Text = isTuningApplied ? "✓" : "⚡";
+                            }
+                            if (statusCircle != null)
+                            {
+                                statusCircle.BorderBrush = new SolidColorBrush(isTuningApplied ? Color.FromRgb(16, 185, 129) : Color.FromRgb(51, 65, 85));
+                                statusCircle.Background = new SolidColorBrush(isTuningApplied ? Color.FromRgb(6, 40, 28) : Color.FromRgb(18, 24, 38));
+                            }
+                            if (statusCard != null)
+                            {
+                                statusCard.BorderBrush = new SolidColorBrush(isTuningApplied ? Color.FromRgb(16, 185, 129) : Color.FromRgb(30, 41, 59));
+                            }
+                        }
+
                         txtRobloxStatus.Text = robloxRunning
                             ? (isLiveGameServer ? ("Connected: " + liveTarget) : "Roblox Running: Monitoring telemetry...")
                             : "Standby: Monitoring Roblox client...";
-
-                        if (btnTuneNow != null)
-                        {
-                            btnTuneNow.Text = isTuningApplied ? "TUNED ✓" : "TUNE NOW";
-                        }
 
                         // Update traffic dot
                         if (currentTraffic != null && dotCompetingTraffic != null && txtCompetingTraffic != null)
@@ -1664,6 +1684,16 @@ namespace RobloxNetworkTuner
             if (isTuningInProgress) return;
             isTuningInProgress = true;
             btnTuneNow.Text = "TUNING...";
+            txtOptTitle.Text = "Optimizing Network Stack...";
+            txtOptTitle.Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248));
+            txtOptSub.Text = "Applying 0.50ms kernel timer, NDIS queue tuning, and AFD buffers...";
+            if (statusCheckIcon != null) statusCheckIcon.Text = "⟳";
+            if (statusCircle != null)
+            {
+                WpfAnimationHelper.AnimateBorderBrush(statusCircle, Color.FromRgb(56, 189, 248), 120);
+                statusCircle.Background = new SolidColorBrush(Color.FromRgb(8, 30, 48));
+            }
+            if (statusCard != null) WpfAnimationHelper.AnimateBorderBrush(statusCard, Color.FromRgb(56, 189, 248), 120);
 
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -1678,7 +1708,16 @@ namespace RobloxNetworkTuner
                 {
                     isTuningInProgress = false;
                     btnTuneNow.Text = "TUNED ✓";
+                    if (statusCheckIcon != null) statusCheckIcon.Text = "✓";
+                    if (statusCircle != null)
+                    {
+                        WpfAnimationHelper.AnimateBorderBrush(statusCircle, Color.FromRgb(16, 185, 129), 200);
+                        statusCircle.Background = new SolidColorBrush(Color.FromRgb(6, 40, 28));
+                    }
                     txtOptTitle.Text = "Optimized Successfully";
+                    txtOptTitle.Foreground = new SolidColorBrush(Colors.White);
+                    txtOptSub.Text = "0.50ms timer • NDIS fast-path • EcoQoS disabled";
+                    if (statusCard != null) WpfAnimationHelper.AnimateBorderBrush(statusCard, Color.FromRgb(16, 185, 129), 300);
                 }));
             });
         }
@@ -1904,6 +1943,209 @@ namespace RobloxNetworkTuner
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region Smooth Hardware-Accelerated Splash Screen
+
+    public class SplashWindow : Window
+    {
+        private readonly Window mainWindow;
+        private readonly System.Windows.Application app;
+        private readonly DispatcherTimer timer;
+        private bool isClosing = false;
+
+        public SplashWindow(Window targetWindow, System.Windows.Application targetApp)
+        {
+            this.mainWindow = targetWindow;
+            this.app = targetApp;
+
+            this.Title = "Roblox Network Tuner";
+            this.Width = 460;
+            this.Height = 260;
+            this.WindowStyle = WindowStyle.None;
+            this.AllowsTransparency = true;
+            this.Background = new SolidColorBrush(Colors.Transparent);
+            this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            this.ShowInTaskbar = false;
+            this.ResizeMode = ResizeMode.NoResize;
+            this.Topmost = true;
+            this.Opacity = 0.0;
+
+            BuildUi();
+
+            // Smooth fade-in
+            this.Loaded += delegate
+            {
+                DoubleAnimation fadeIn = new DoubleAnimation(0.0, 1.0, new Duration(TimeSpan.FromMilliseconds(180)));
+                fadeIn.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                this.BeginAnimation(Window.OpacityProperty, fadeIn);
+            };
+
+            // Allow click to skip splash
+            this.MouseLeftButtonDown += delegate
+            {
+                CompleteSplash();
+            };
+
+            // Hold splash briefly for smooth visual presentation
+            timer = new DispatcherTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(1050);
+            timer.Tick += delegate
+            {
+                timer.Stop();
+                CompleteSplash();
+            };
+            timer.Start();
+        }
+
+        private void BuildUi()
+        {
+            Border root = new Border();
+            root.CornerRadius = new CornerRadius(14);
+            root.Background = new SolidColorBrush(Color.FromRgb(11, 14, 20));
+            root.BorderBrush = new SolidColorBrush(Color.FromArgb(160, 16, 185, 129));
+            root.BorderThickness = new Thickness(1.2);
+            root.Effect = new DropShadowEffect
+            {
+                Color = Color.FromRgb(16, 185, 129),
+                BlurRadius = 36,
+                ShadowDepth = 0,
+                Opacity = 0.28
+            };
+
+            Grid grid = new Grid();
+            grid.Margin = new Thickness(26);
+
+            StackPanel centerStack = new StackPanel();
+            centerStack.HorizontalAlignment = HorizontalAlignment.Center;
+            centerStack.VerticalAlignment = VerticalAlignment.Center;
+
+            // 1. Sleek Emblem with glowing lightning bolt
+            Border emblem = new Border();
+            emblem.Width = 52;
+            emblem.Height = 52;
+            emblem.CornerRadius = new CornerRadius(14);
+            emblem.Background = new SolidColorBrush(Color.FromArgb(28, 16, 185, 129));
+            emblem.BorderBrush = new SolidColorBrush(Color.FromArgb(120, 52, 211, 153));
+            emblem.BorderThickness = new Thickness(1.2);
+            emblem.HorizontalAlignment = HorizontalAlignment.Center;
+            emblem.Margin = new Thickness(0, 0, 0, 14);
+
+            Polygon bolt = new Polygon();
+            bolt.Points = new PointCollection
+            {
+                new Point(16, 3), new Point(6, 16), new Point(14, 16),
+                new Point(12, 27), new Point(24, 12), new Point(16, 12)
+            };
+            bolt.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+            bolt.Stroke = new SolidColorBrush(Color.FromRgb(52, 211, 153));
+            bolt.StrokeThickness = 1.2;
+            bolt.HorizontalAlignment = HorizontalAlignment.Center;
+            bolt.VerticalAlignment = VerticalAlignment.Center;
+            emblem.Child = bolt;
+            centerStack.Children.Add(emblem);
+
+            // 2. Main Title
+            TextBlock title = new TextBlock
+            {
+                Text = "ROBLOX NETWORK TUNER",
+                FontSize = 15.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Colors.White),
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            centerStack.Children.Add(title);
+
+            // 3. Subtitle
+            TextBlock sub = new TextBlock
+            {
+                Text = "Low-Latency & Anti-Jitter Packet Engine",
+                FontSize = 10.5,
+                Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 3, 0, 18)
+            };
+            centerStack.Children.Add(sub);
+
+            // 4. Smooth Animated Glowing Progress Track
+            Border track = new Border
+            {
+                Width = 260,
+                Height = 3.5,
+                CornerRadius = new CornerRadius(2),
+                Background = new SolidColorBrush(Color.FromRgb(30, 41, 59)),
+                ClipToBounds = true,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+
+            Canvas canvas = new Canvas { Width = 260, Height = 3.5 };
+            Border bar = new Border
+            {
+                Width = 80,
+                Height = 3.5,
+                CornerRadius = new CornerRadius(2),
+                Background = new LinearGradientBrush(
+                    Color.FromArgb(0, 16, 185, 129),
+                    Color.FromRgb(52, 211, 153),
+                    new Point(0, 0),
+                    new Point(1, 0))
+            };
+
+            TranslateTransform barTransform = new TranslateTransform(-80, 0);
+            bar.RenderTransform = barTransform;
+            canvas.Children.Add(bar);
+            track.Child = canvas;
+            centerStack.Children.Add(track);
+
+            DoubleAnimation slideAnim = new DoubleAnimation(-80, 260, new Duration(TimeSpan.FromMilliseconds(900)))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
+            barTransform.BeginAnimation(TranslateTransform.XProperty, slideAnim);
+
+            // 5. Version & Status Pill
+            TextBlock status = new TextBlock
+            {
+                Text = "v" + GitHubUpdateModule.CurrentVersion + " • Ready",
+                FontSize = 9.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)),
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            centerStack.Children.Add(status);
+
+            grid.Children.Add(centerStack);
+            root.Child = grid;
+            this.Content = root;
+        }
+
+        private void CompleteSplash()
+        {
+            if (isClosing) return;
+            isClosing = true;
+            if (timer != null) timer.Stop();
+
+            DoubleAnimation fadeOut = new DoubleAnimation(1.0, 0.0, new Duration(TimeSpan.FromMilliseconds(220)))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+            };
+            fadeOut.Completed += delegate
+            {
+                this.Hide();
+                if (mainWindow != null)
+                {
+                    app.MainWindow = mainWindow;
+                    mainWindow.Show();
+                    mainWindow.Activate();
+                }
+                this.Close();
+            };
+            this.BeginAnimation(Window.OpacityProperty, fadeOut);
+        }
     }
 
     #endregion

@@ -1,5 +1,5 @@
 ================================================================================
-ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE (v2.4.6)
+ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE (v2.4.7)
 ================================================================================
 
 Roblox Network Tuner is an evidence-based, adaptive low-latency optimization
