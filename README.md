@@ -59,52 +59,50 @@ High-performance Windows network and kernel latency tuner for Roblox. Targets UD
 
 ---
 
-## Standalone Bootstrapper Installer
+## Setup & Installation
 
-The bootstrapper (`RobloxNetworkTunerSetup.exe`) is a standalone single-file installer engineered for effortless distribution across laptops and PCs:
-* **Embedded Compressed Payload**: Embeds `RobloxNetworkTuner.pkg` (GZip compressed stream) to eliminate raw PE dropper signatures from heuristic antivirus engines.
-* **Rolling Console UI**: Outputs real-time, granular step-by-step progress counters (`[01/18]` through `[18/18]`) with ASCII art branding.
-* **Windows Shell & ARP Integration**: Creates Desktop shortcuts, Start Menu program groups, and registers with Windows Installed Apps (`Add/Remove Programs`).
-* **%TEMP% Worker Delegation Uninstaller**: Automatically deploys a self-contained uninstaller (`uninstall.exe`). When uninstalled, it delegates to a detached `%TEMP%` worker that releases all file locks, restores system network baselines, removes all shortcuts and registry keys, and purges the entire installation directory.
+The setup executable (`RobloxNetworkTunerSetup.exe`) is a standalone single-file installer:
+* **Embedded Compressed Payload**: Embeds `RobloxNetworkTuner.pkg` (GZip compressed stream) to deliver the complete engine in a single binary.
+* **Graphical Installer**: Clean dark-mode setup interface with progress display and step tracking.
+* **Shell Integration**: Creates Desktop and Start Menu shortcuts, and registers in Windows Installed Apps (`Add/Remove Programs`).
+* **Uninstaller Support**: Installs `uninstall.exe` which cleanly delegates to `%TEMP%` to remove all shortcuts, restore default network settings, and remove the installation folder.
 
 ---
 
 ## Usage
 
-### Interactive Hands-Free Dark Gaming GUI (Default)
-Double-click `RobloxNetworkTuner.exe` (or launch via Desktop shortcut created by `RobloxNetworkTunerSetup.exe`):
-1. Elevates with Administrator privileges seamlessly.
-2. Opens a modern, high-tech obsidian dark-mode dashboard with real-time neon telemetry.
-3. Automatically executes all kernel, network, and QoS stack optimizations without requiring a single click.
-4. Dynamically monitors `RobloxPlayerBeta.exe` (boosting CPU to High, I/O to High, and bypassing EcoQoS).
-5. Provides live RFC 3550 round-trip time and jitter pacing telemetry against Roblox edge servers.
-6. Automatically restores stock Windows baselines when Roblox exits, or when clicking "Restore Baseline & Exit".
-7. Supports "Minimize to Tray" for silent, distraction-free gaming.
+### Graphical Dashboard (Default)
+Launch `RobloxNetworkTuner.exe` (or run via the Desktop shortcut):
+1. Prompts for Administrator elevation (required for network stack and timer adjustments).
+2. Displays active network interface configuration, Roblox process status, and live RFC 3550 edge latency and jitter metrics.
+3. Automatically applies network and process priority optimizations.
+4. When Roblox closes or the app exits, all system and network settings automatically revert to Windows defaults.
+5. Supports minimizing to system tray for unobtrusive operation.
 
 ### Command Line Flags
 ```cmd
 # Core Tuner Engine
-RobloxNetworkTuner.exe               Launch interactive hands-free dark gaming GUI
-RobloxNetworkTuner.exe --console     Launch interactive terminal watchdog session
-RobloxNetworkTuner.exe --status      Inspect current kernel, NDIS, AFD, and network state
-RobloxNetworkTuner.exe --benchmark   Run RFC 3550 RTT and Jitter Benchmark diagnostic
-RobloxNetworkTuner.exe --restore     Perform standalone restoration to system baseline
-RobloxNetworkTuner.exe --check-update Check GitHub releases for tuner updates
-RobloxNetworkTuner.exe --update      Automatically download and apply latest release in-place
-RobloxNetworkTuner.exe --help        Show usage details
+RobloxNetworkTuner.exe               Launch graphical dashboard
+RobloxNetworkTuner.exe --console     Launch console watchdog session
+RobloxNetworkTuner.exe --status      Show current network and adapter configuration
+RobloxNetworkTuner.exe --benchmark   Run RFC 3550 latency and jitter test
+RobloxNetworkTuner.exe --restore     Restore default Windows network settings
+RobloxNetworkTuner.exe --check-update Check for updates on GitHub
+RobloxNetworkTuner.exe --update      Download and install latest release
+RobloxNetworkTuner.exe --help        Display command line help
 
-# Setup Bootstrapper
-RobloxNetworkTunerSetup.exe          Run interactive installation with rolling status
+# Setup Installer
+RobloxNetworkTunerSetup.exe          Run graphical installer
 RobloxNetworkTunerSetup.exe -s       Run silent unattended installation
 RobloxNetworkTunerSetup.exe -d <dir> Install to custom directory
-RobloxNetworkTunerSetup.exe -u       Perform complete uninstallation and restore baseline
+RobloxNetworkTunerSetup.exe -u       Uninstall and restore default network settings
 ```
 
 ---
 
 ## Building from Source
 
-To compile both the core engine and standalone setup bootstrapper with the embedded custom icon, run the automated build script in PowerShell:
+To compile both the core engine and setup installer, run the build script in PowerShell:
 
 ```powershell
 .\build_installer.ps1
@@ -113,9 +111,9 @@ To compile both the core engine and standalone setup bootstrapper with the embed
 Or compile manually using the 64-bit .NET Framework compiler (`csc.exe`):
 
 ```powershell
-# 1. Compile Core Tuner Engine (GUI + Console)
+# 1. Compile Core Tuner Engine
 & "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /out:RobloxNetworkTuner.exe /win32icon:app.ico /win32manifest:app.manifest /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 Program.cs
 
-# 2. Compile Bootstrapper Setup Installer
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:exe /out:RobloxNetworkTunerSetup.exe /win32icon:app.ico /win32manifest:installer.manifest /res:RobloxNetworkTuner.pkg,RobloxNetworkTuner.pkg /optimize+ /platform:x64 Bootstrapper.cs
+# 2. Compile Setup Installer
+& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /out:RobloxNetworkTunerSetup.exe /win32icon:app.ico /win32manifest:installer.manifest /res:RobloxNetworkTuner.pkg,RobloxNetworkTuner.pkg /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 Bootstrapper.cs
 ```

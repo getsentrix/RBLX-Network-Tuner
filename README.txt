@@ -2,8 +2,8 @@
 ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE
 ================================================================================
 
-Roblox Network Tuner is a dedicated low-latency and anti-jitter optimization
-engine engineered for Roblox on Windows 10 and Windows 11.
+Roblox Network Tuner is a dedicated low-latency optimization tool
+engineered for Roblox on Windows 10 and Windows 11.
 
 FEATURES:
 - AFD Fast-Path: Locks Winsock datagram buffers to bypass socket queuing delays.
@@ -16,25 +16,23 @@ FEATURES:
 - Automated Jitter Benchmark: Measures packet pacing and jitter variance (RFC 3550).
 
 HOW TO USE:
-1. Double-click the "Roblox Network Tuner" shortcut on your Desktop or Start Menu.
+1. Launch "Roblox Network Tuner" from your Start Menu or Desktop.
 2. Accept the Windows UAC elevation prompt (Administrator privileges required).
-3. The engine activates all optimizations and waits for RobloxPlayerBeta.exe.
+3. The engine activates optimizations and waits for RobloxPlayerBeta.exe.
 4. When you finish playing, press [Space], [Q], [Esc], or simply close Roblox.
-   Your system configuration will automatically restore to baseline.
+   Settings automatically revert to Windows defaults when Roblox closes.
 
 COMMAND LINE OPTIONS:
-  RobloxNetworkTuner.exe              Launch interactive session
-  RobloxNetworkTuner.exe --status     Display current kernel and network stack state
-  RobloxNetworkTuner.exe --benchmark  Run RFC 3550 RTT and Jitter benchmark
-  RobloxNetworkTuner.exe --restore    Perform manual restoration to system baseline
+  RobloxNetworkTuner.exe              Launch graphical dashboard
+  RobloxNetworkTuner.exe --status     Display current network and adapter state
+  RobloxNetworkTuner.exe --benchmark  Run RFC 3550 latency and jitter test
+  RobloxNetworkTuner.exe --restore    Restore default Windows network settings
   RobloxNetworkTuner.exe --help       Show usage options
 
-EMERGENCY RESTORE:
-If your computer abruptly shut down while running, launch "Restore Baseline" from
+EMERGENCY RESET:
+If your computer abruptly shut down while running, launch "Reset Network Settings" from
 the Start Menu, or run "Restore-Stock.bat" in the installation directory.
 
 UNINSTALLATION:
-You can uninstall Roblox Network Tuner at any time via:
-- Windows Settings -> Apps -> Installed Apps -> Roblox Network Tuner -> Uninstall
-- Or Control Panel -> Programs and Features -> Roblox Network Tuner -> Uninstall
+Uninstall via Windows Settings -> Apps -> Installed Apps -> Roblox Network Tuner.
 ================================================================================

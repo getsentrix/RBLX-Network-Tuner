@@ -26,8 +26,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("3a4d6201-9f14-4e86-8e30-22d29cda328c")]
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+[assembly: AssemblyVersion("2.1.1.0")]
+[assembly: AssemblyFileVersion("2.1.1.0")]
 
 namespace RobloxNetworkTuner.Setup
 {
@@ -36,7 +36,7 @@ namespace RobloxNetworkTuner.Setup
     internal static class Program
     {
         public const string AppTitle = "Roblox Network Tuner";
-        public const string AppVersion = "2.1.0";
+        public const string AppVersion = "2.1.1";
         public const string PublisherName = "Roblox Performance Engineering";
         public const string UninstallRegSubKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RobloxNetworkTuner";
         public const string QosPolicyName = "RobloxNetworkTuner_DSCP46";
@@ -242,7 +242,7 @@ namespace RobloxNetworkTuner.Setup
             Thread.Sleep(50);
 
             // Phase 1: Engine Extraction
-            if (report != null) report(0.22f, 1, "Reading embedded compressed payload resource stream...");
+            if (report != null) report(0.22f, 1, "Unpacking installation files...");
             tunerBytes = ExtractOrDecompressPayload("RobloxNetworkTuner.pkg", "RobloxNetworkTuner.exe");
             if (tunerBytes == null || tunerBytes.Length == 0)
             {
@@ -250,35 +250,35 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(60);
 
-            if (report != null) report(0.32f, 1, string.Format("Decompressing latency engine binary ({0:N0} bytes)...", tunerBytes.Length));
+            if (report != null) report(0.32f, 1, string.Format("Extracting RobloxNetworkTuner.exe ({0:N0} bytes)...", tunerBytes.Length));
             Thread.Sleep(50);
 
-            if (report != null) report(0.42f, 1, "Deploying executable engine binary: RobloxNetworkTuner.exe...");
+            if (report != null) report(0.42f, 1, "Installing RobloxNetworkTuner.exe...");
             File.WriteAllBytes(tunerExePath, tunerBytes);
             Thread.Sleep(60);
 
-            if (report != null) report(0.48f, 1, "Writing baseline restoration script: Restore-Stock.bat...");
+            if (report != null) report(0.48f, 1, "Creating Restore-Defaults.bat...");
             string batContent =
                 "@echo off\r\n" +
                 "setlocal EnableDelayedExpansion\r\n" +
-                "title Restore Stock System Settings\r\n" +
+                "title Restore Default Network Settings\r\n" +
                 "cd /d \"%~dp0\"\r\n" +
                 "if exist \"%~dp0RobloxNetworkTuner.exe\" (\r\n" +
                 "    \"%~dp0RobloxNetworkTuner.exe\" --restore\r\n" +
                 ")\r\n" +
                 "echo.\r\n" +
-                "echo Baseline network settings have been restored.\r\n" +
+                "echo Default network settings have been restored.\r\n" +
                 "pause\r\n";
             File.WriteAllText(restoreBatPath, batContent);
             Thread.Sleep(40);
 
-            if (report != null) report(0.54f, 1, "Generating reference guide and uninstaller binary...");
+            if (report != null) report(0.54f, 1, "Generating reference guide and uninstaller...");
             string readmeContent =
                 "================================================================================\r\n" +
                 "ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE\r\n" +
                 "================================================================================\r\n\r\n" +
                 "Roblox Network Tuner is a dedicated low-latency and anti-jitter optimization\r\n" +
-                "engine engineered for Roblox on Windows 10 and Windows 11.\r\n\r\n" +
+                "tool engineered for Roblox on Windows 10 and Windows 11.\r\n\r\n" +
                 "FEATURES:\r\n" +
                 "- AFD Fast-Path: Locks Winsock datagram buffers to bypass socket queuing delays.\r\n" +
                 "- Global 0.50 ms Timer: Sets NT kernel hardware interrupt timer to 0.50 ms (2000 Hz).\r\n" +
@@ -293,7 +293,7 @@ namespace RobloxNetworkTuner.Setup
                 "2. Accept the Windows UAC elevation prompt (Administrator privileges required).\r\n" +
                 "3. The engine activates all optimizations and waits for RobloxPlayerBeta.exe.\r\n" +
                 "4. When you finish playing, press [Space], [Q], [Esc], or simply close Roblox.\r\n" +
-                "   Your system configuration will automatically restore to baseline.\r\n\r\n" +
+                "   Settings automatically revert to Windows defaults when Roblox closes.\r\n\r\n" +
                 "UNINSTALLATION:\r\n" +
                 "Uninstall via Windows Settings -> Apps -> Installed Apps -> Roblox Network Tuner.\r\n" +
                 "================================================================================\r\n";
@@ -307,7 +307,7 @@ namespace RobloxNetworkTuner.Setup
             Thread.Sleep(50);
 
             // Phase 2: System Integration
-            if (report != null) report(0.62f, 2, "Creating Start Menu program group and shell links...");
+            if (report != null) report(0.62f, 2, "Creating Start Menu shortcuts...");
             string progDir = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
             if (string.IsNullOrEmpty(progDir) || !Directory.Exists(progDir))
             {
@@ -316,15 +316,15 @@ namespace RobloxNetworkTuner.Setup
             string groupDir = Path.Combine(progDir, "Roblox Network Tuner");
             if (!Directory.Exists(groupDir)) Directory.CreateDirectory(groupDir);
 
-            CreateShortcut(Path.Combine(groupDir, "Roblox Network Tuner.lnk"), tunerExePath, targetDir, "", "Roblox Low-Latency & Anti-Jitter Tuner", tunerExePath + ",0");
-            CreateShortcut(Path.Combine(groupDir, "Restore Network Baseline.lnk"), tunerExePath, targetDir, "--restore", "Restore Windows Network Baseline", tunerExePath + ",0");
+            CreateShortcut(Path.Combine(groupDir, "Roblox Network Tuner.lnk"), tunerExePath, targetDir, "", "Roblox Network Tuner", tunerExePath + ",0");
+            CreateShortcut(Path.Combine(groupDir, "Reset Network Settings.lnk"), tunerExePath, targetDir, "--restore", "Restore Default Windows Network Settings", tunerExePath + ",0");
             CreateShortcut(Path.Combine(groupDir, "Uninstall Roblox Network Tuner.lnk"), uninstallerPath, targetDir, "--uninstall", "Uninstall Roblox Network Tuner", uninstallerPath + ",0");
             Thread.Sleep(60);
 
-            if (report != null) report(0.72f, 2, "Creating Desktop shortcut: Roblox Network Tuner.lnk...");
+            if (report != null) report(0.72f, 2, "Creating Desktop shortcut...");
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             string lnk = Path.Combine(desktopPath, "Roblox Network Tuner.lnk");
-            CreateShortcut(lnk, tunerExePath, targetDir, "", "Roblox Low-Latency & Anti-Jitter Tuner", tunerExePath + ",0");
+            CreateShortcut(lnk, tunerExePath, targetDir, "", "Roblox Network Tuner", tunerExePath + ",0");
 
             string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string[] extraDesktops = new string[]
@@ -377,7 +377,7 @@ namespace RobloxNetworkTuner.Setup
         public static void RunUninstallWork(string installDir, ProgressReportHandler report)
         {
             // Phase 0: Process Termination
-            if (report != null) report(0.10f, 0, "Scanning and terminating active RobloxNetworkTuner processes...");
+            if (report != null) report(0.10f, 0, "Closing running processes...");
             Process[] procs = Process.GetProcessesByName("RobloxNetworkTuner");
             for (int i = 0; i < procs.Length; i++)
             {
@@ -390,8 +390,8 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(60);
 
-            // Phase 1: Kernel & Hardware Baseline
-            if (report != null) report(0.25f, 1, "Reverting NT kernel hardware timer resolution to 15.625 ms...");
+            // Phase 1: Kernel & Timer Settings
+            if (report != null) report(0.25f, 1, "Resetting kernel timer resolution...");
             uint dummy;
             NtSetTimerResolution(156250, false, out dummy);
             TimeEndPeriod(1);
@@ -401,7 +401,7 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(50);
 
-            if (report != null) report(0.35f, 1, "Restoring WLAN AutoConfig background scanning on Wi-Fi interfaces...");
+            if (report != null) report(0.35f, 1, "Enabling Wi-Fi autoconfig scanning...");
             string wifiOut = RunCapture("netsh.exe", "wlan show interfaces");
             MatchCollection matches = Regex.Matches(wifiOut, @"^\s*Name\s*:\s*(.+)$", RegexOptions.Multiline);
             foreach (Match m in matches)
@@ -411,7 +411,7 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(50);
 
-            if (report != null) report(0.45f, 1, "Purging QoS DSCP 46 policies and registry configurations...");
+            if (report != null) report(0.45f, 1, "Removing QoS DSCP policy...");
             try
             {
                 using (RegistryKey polKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\QoS", true))
@@ -424,7 +424,7 @@ namespace RobloxNetworkTuner.Setup
             Thread.Sleep(50);
 
             // Phase 2: Network Stack Reset
-            if (report != null) report(0.55f, 2, "Restoring Winsock AFD socket buffer configuration parameters...");
+            if (report != null) report(0.55f, 2, "Resetting Winsock AFD parameters...");
             using (RegistryKey afdKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\AFD\Parameters", true))
             {
                 if (afdKey != null)
@@ -440,7 +440,7 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(40);
 
-            if (report != null) report(0.65f, 2, "Resetting TCP/IP PMTU discovery and core stack parameters...");
+            if (report != null) report(0.65f, 2, "Resetting TCP/IP stack parameters...");
             using (RegistryKey tcpKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", true))
             {
                 if (tcpKey != null)
@@ -456,7 +456,7 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(40);
 
-            if (report != null) report(0.72f, 2, "Resetting TCP ACK frequency (TcpAckFrequency, TCPNoDelay)...");
+            if (report != null) report(0.72f, 2, "Resetting TCP ACK frequency...");
             NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
             foreach (NetworkInterface nic in interfaces)
             {
@@ -476,7 +476,7 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(40);
 
-            if (report != null) report(0.78f, 2, "Restoring TCP congestion provider, NetOffload & MMCSS...");
+            if (report != null) report(0.78f, 2, "Resetting congestion provider & MMCSS...");
             RunSilent("netsh.exe", "int tcp set global rsc=enabled");
             RunSilent("netsh.exe", "int tcp set global timestamps=allowed");
             RunSilent("netsh.exe", "int tcp set supplemental template=internet congestionprovider=default");
@@ -499,7 +499,7 @@ namespace RobloxNetworkTuner.Setup
             Thread.Sleep(50);
 
             // Phase 3: System Cleanup
-            if (report != null) report(0.85f, 3, "Removing shell shortcuts and Start Menu program group...");
+            if (report != null) report(0.85f, 3, "Removing shortcuts...");
             string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string[] desktopPaths = new string[]
             {
@@ -534,7 +534,7 @@ namespace RobloxNetworkTuner.Setup
             try { Registry.CurrentUser.DeleteSubKeyTree(UninstallRegSubKey, false); } catch { }
             Thread.Sleep(50);
 
-            if (report != null) report(0.95f, 3, "Purging installation files and folder tree...");
+            if (report != null) report(0.95f, 3, "Removing application files...");
             if (!string.IsNullOrEmpty(installDir) && Directory.Exists(installDir))
             {
                 string dirName = Path.GetFileName(installDir.TrimEnd('\\', '/'));
@@ -563,7 +563,7 @@ namespace RobloxNetworkTuner.Setup
             }
             Thread.Sleep(50);
 
-            if (report != null) report(1.0f, 3, "Uninstallation completed. System baseline fully restored.");
+            if (report != null) report(1.0f, 3, "Uninstallation complete. Default settings restored.");
         }
 
         private static int DispatchUninstall(bool isSilent)
@@ -816,10 +816,10 @@ namespace RobloxNetworkTuner.Setup
             Console.WriteLine("  RobloxNetworkTunerSetup.exe [options]");
             Console.WriteLine();
             Console.WriteLine("Options:");
-            Console.WriteLine("  (no args)           Run 60 FPS animated modern dark GUI installer");
+            Console.WriteLine("  (no args)           Run graphical installer");
             Console.WriteLine("  --silent, -s        Run silent unattended installation");
             Console.WriteLine("  --dir <path>, -d    Specify custom destination directory");
-            Console.WriteLine("  --uninstall, -u     Perform complete uninstallation and restore baseline");
+            Console.WriteLine("  --uninstall, -u     Uninstall and restore default network settings");
             Console.WriteLine("  --help, -h, /?      Display this help menu");
             Console.WriteLine();
         }
@@ -827,7 +827,7 @@ namespace RobloxNetworkTuner.Setup
         #endregion
     }
 
-    #region Award-Winning 60 FPS Animated Setup GUI
+    #region Setup GUI
 
     public class SetupGuiForm : Form
     {
@@ -1272,14 +1272,14 @@ namespace RobloxNetworkTuner.Setup
             using (SolidBrush bSub = new SolidBrush(colTextMuted))
             {
                 string tag = isUninstall
-                    ? "Complete Uninstaller & System Baseline Restorer"
-                    : "Ultra-Low Latency & Anti-Jitter Optimization Engine";
+                    ? "Remove application and reset network settings"
+                    : "Low-latency network optimizer for Roblox";
                 g.DrawString(tag, fontSubtitle, bSub, textX + 1, y + 26);
             }
 
             // Architecture Pill Badge
             int badgeY = y + 47;
-            int badgeW = isUninstall ? 140 : 155;
+            int badgeW = isUninstall ? 115 : 100;
             int badgeH = 18;
             Rectangle rectBadge = new Rectangle(textX + 1, badgeY, badgeW, badgeH);
 
@@ -1293,15 +1293,15 @@ namespace RobloxNetworkTuner.Setup
             }
             using (SolidBrush bBadgeText = new SolidBrush(colEmerald))
             {
-                string badgeStr = isUninstall ? "BASELINE RESTORE MODE" : "v2.1.0 • x64 PRODUCTION";
+                string badgeStr = isUninstall ? "UNINSTALL • x64" : "SETUP • x64";
                 g.DrawString(badgeStr, fontBadge, bBadgeText, rectBadge.X + 7, rectBadge.Y + 3);
             }
         }
 
         private void DrawMilestones(Graphics g, int y)
         {
-            string[] installLabels = new string[] { "VERIFY", "PAYLOAD", "SHELL", "COMMIT" };
-            string[] uninstallLabels = new string[] { "PROCESS", "KERNEL", "STACK", "CLEANUP" };
+            string[] installLabels = new string[] { "SYSTEM", "FILES", "SHORTCUTS", "FINISH" };
+            string[] uninstallLabels = new string[] { "PROCESS", "TIMER", "NETWORK", "CLEANUP" };
             string[] labels = isUninstall ? uninstallLabels : installLabels;
 
             int totalNodes = 4;
@@ -1457,8 +1457,8 @@ namespace RobloxNetworkTuner.Setup
             using (SolidBrush bDest = new SolidBrush(colTextDim))
             {
                 string destText = isUninstall
-                    ? "Target Directory: " + (!string.IsNullOrEmpty(targetDir) ? targetDir : "Clean system baseline")
-                    : "Destination Directory: " + targetDir;
+                    ? "Target Directory: " + (!string.IsNullOrEmpty(targetDir) ? targetDir : "Default")
+                    : "Destination: " + targetDir;
                 g.DrawString(destText, fontBadge, bDest, padX, trackY + 16);
             }
         }
@@ -1502,14 +1502,14 @@ namespace RobloxNetworkTuner.Setup
             int txtX = badgeX + 48;
             using (SolidBrush bTitle = new SolidBrush(colEmerald))
             {
-                string title = isUninstall ? "Uninstallation Complete" : "Ready to Play!";
+                string title = isUninstall ? "Uninstallation Complete" : "Installation Complete";
                 g.DrawString(title, fontBrand, bTitle, txtX, y + 14);
             }
             using (SolidBrush bMsg = new SolidBrush(colTextMuted))
             {
                 string desc = isUninstall
-                    ? "Network baseline and registry configurations restored cleanly."
-                    : "Roblox Network Tuner is installed. Accelerate your connection now.";
+                    ? "Windows network and registry defaults restored."
+                    : "Roblox Network Tuner is installed and ready to use.";
                 g.DrawString(desc, fontSubtitle, bMsg, txtX, y + 42);
             }
         }
@@ -1550,7 +1550,7 @@ namespace RobloxNetworkTuner.Setup
                 // Active State Message
                 using (SolidBrush bWait = new SolidBrush(colTextMuted))
                 {
-                    g.DrawString("Configuring system parameters... Do not close this window.", fontSubtitle, bWait, 35, y + 20);
+                    g.DrawString("Applying configurations... Please wait.", fontSubtitle, bWait, 35, y + 20);
                 }
 
                 // High-precision rotating activity dot pulse
@@ -1588,11 +1588,11 @@ namespace RobloxNetworkTuner.Setup
                     g.DrawString("Close", fontButton, bDismissText, rectDismissBtn.X + (rectDismissBtn.Width - sz.Width) / 2f, rectDismissBtn.Y + (rectDismissBtn.Height - sz.Height) / 2f);
                 }
 
-                // Primary "LAUNCH TUNER NOW (3s)" Button
+                // Primary "LAUNCH NOW" Button
                 bool isLaunchHover = (hoverElement == "launch");
                 string launchText = autoLaunchCanceled
-                    ? "LAUNCH TUNER"
-                    : string.Format("LAUNCH TUNER ({0}s)", Math.Max(0, countdownSeconds));
+                    ? "LAUNCH NOW"
+                    : string.Format("LAUNCH NOW ({0}s)", Math.Max(0, countdownSeconds));
 
                 using (LinearGradientBrush lgbBtn = new LinearGradientBrush(rectLaunchBtn, colCyan, colEmerald, LinearGradientMode.Horizontal))
                 {

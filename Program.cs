@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+[assembly: AssemblyVersion("2.1.1.0")]
+[assembly: AssemblyFileVersion("2.1.1.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -1595,7 +1595,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.1.0";
+        public const string CurrentVersion = "2.1.1";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -1909,7 +1909,7 @@ namespace RobloxNetworkTuner
             this.trayMenu = new ContextMenuStrip();
             ToolStripMenuItem itemShow = new ToolStripMenuItem("Show Dashboard", null, delegate { ShowDashboard(); });
             ToolStripMenuItem itemUpdate = new ToolStripMenuItem("Check for Updates", null, delegate { GitHubUpdateModule.CheckForUpdate(true); });
-            ToolStripMenuItem itemExit = new ToolStripMenuItem("Restore Baseline & Exit", null, delegate { SafeExit(); });
+            ToolStripMenuItem itemExit = new ToolStripMenuItem("Reset & Exit", null, delegate { SafeExit(); });
             this.trayMenu.Items.Add(itemShow);
             this.trayMenu.Items.Add(itemUpdate);
             this.trayMenu.Items.Add(new ToolStripSeparator());
@@ -2015,7 +2015,7 @@ namespace RobloxNetworkTuner
                     if (robloxRunning)
                     {
                         robloxRunning = false;
-                        watchdogStatus = "STANDBY: Roblox exited. System baseline intact.";
+                        watchdogStatus = "STANDBY: Roblox exited. Waiting for game launch...";
                     }
                     else
                     {
@@ -2117,7 +2117,7 @@ namespace RobloxNetworkTuner
                     this.Hide();
                     if (this.trayIcon != null)
                     {
-                        this.trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Running silently in background. Baseline safe.", ToolTipIcon.Info);
+                        this.trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Running in background.", ToolTipIcon.Info);
                     }
                     return;
                 }
@@ -2189,11 +2189,11 @@ namespace RobloxNetworkTuner
             using (Font fSub = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bSub = new SolidBrush(Color.FromArgb(0, 240, 255)))
             {
-                g.DrawString("ULTRA LOW-LATENCY & ANTI-JITTER ENGINE", fSub, bSub, 69, 37);
+                g.DrawString("NETWORK OPTIMIZER FOR ROBLOX", fSub, bSub, 69, 37);
             }
 
             // Version Pill
-            DrawPill(g, 342, 16, 54, 20, "v2.1.0", Color.FromArgb(22, 35, 59), Color.FromArgb(0, 240, 255));
+            DrawPill(g, 342, 16, 54, 20, "v2.1.1", Color.FromArgb(22, 35, 59), Color.FromArgb(0, 240, 255));
 
             // Minimize & Close Buttons
             DrawWindowButton(g, rectBtnMin, "—", hoverBtnMin, Color.FromArgb(35, 45, 66), Color.White);
@@ -2338,7 +2338,7 @@ namespace RobloxNetworkTuner
             using (Font fHint = new Font("Segoe UI", 7.75f, FontStyle.Regular))
             using (Brush bHint = new SolidBrush(Color.FromArgb(120, 135, 155)))
             {
-                g.DrawString("Hands-Free Mode: System baselines are automatically restored when Roblox exits or when closing.",
+                g.DrawString("Settings automatically revert to Windows defaults when Roblox closes.",
                     fHint, bHint, 25, 614);
             }
 
@@ -2346,9 +2346,9 @@ namespace RobloxNetworkTuner
             Color btnTrayBg = hoverBtnTray ? Color.FromArgb(28, 42, 68) : Color.FromArgb(18, 28, 46);
             DrawButton(g, rectBtnTray, "Minimize to Tray", btnTrayBg, Color.FromArgb(0, 240, 255), Color.FromArgb(0, 240, 255));
 
-            // Button 2: Restore Baseline & Exit
+            // Button 2: Reset & Exit
             Color btnExitBg = hoverBtnExit ? Color.FromArgb(64, 25, 34) : Color.FromArgb(45, 18, 25);
-            DrawButton(g, rectBtnExit, "Restore Baseline & Exit", btnExitBg, Color.FromArgb(255, 77, 106), Color.FromArgb(255, 77, 106));
+            DrawButton(g, rectBtnExit, "Reset & Exit", btnExitBg, Color.FromArgb(255, 77, 106), Color.FromArgb(255, 77, 106));
         }
 
         private static void DrawLogoEmblem(Graphics g, float x, float y, float size)
@@ -2683,7 +2683,7 @@ namespace RobloxNetworkTuner
                 {
                     if (robloxSeen)
                     {
-                        Console.WriteLine("\n\n [*] Roblox process exited. Restoring system baseline...");
+                        Console.WriteLine("\n\n [*] Roblox closed. Resetting network settings...");
                         break;
                     }
 
@@ -2699,7 +2699,7 @@ namespace RobloxNetworkTuner
             RestoreAll();
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\n [OK] Baseline restoration complete. Exiting...");
+            Console.WriteLine("\n [OK] Settings restored. Exiting...");
             Console.ResetColor();
             Thread.Sleep(1200);
         }
@@ -2942,7 +2942,7 @@ namespace RobloxNetworkTuner
             currentSnapshot.Timestamp = DateTime.UtcNow.ToString("o");
 
             // 0. Automatic System Restore Point Creation
-            SystemRestoreModule.CreateRestorePoint("RobloxNetworkTuner Pre-Optimization Baseline");
+            SystemRestoreModule.CreateRestorePoint("RobloxNetworkTuner Pre-Optimization Backup");
 
             // 1. Winsock Ancillary Function Driver (AFD) Buffer Locking & UDP Fast-Path
             AfdOptimizationModule.Apply(currentSnapshot);
@@ -2978,8 +2978,8 @@ namespace RobloxNetworkTuner
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("================================================================================");
-            Console.WriteLine(" Session active. Press [Space], [Q], or [Esc] to restore baseline and exit.");
-            Console.WriteLine(" Auto-restores baseline when RobloxPlayerBeta.exe closes.");
+            Console.WriteLine(" Running. Press [Space] or [Esc] to exit.");
+            Console.WriteLine(" Settings automatically revert to defaults when Roblox closes.");
             Console.WriteLine("================================================================================");
             Console.ResetColor();
         }
@@ -3138,7 +3138,7 @@ namespace RobloxNetworkTuner
 
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("\n================================================================================");
-                Console.WriteLine(" Restoring system baseline configuration...");
+                Console.WriteLine(" Restoring default network and system settings...");
                 Console.WriteLine("================================================================================");
                 Console.ResetColor();
 
@@ -3230,7 +3230,7 @@ namespace RobloxNetworkTuner
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("================================================================================");
-            Console.WriteLine(" ROBLOX NETWORK TUNER - BASELINE RESTORATION");
+            Console.WriteLine(" ROBLOX NETWORK TUNER - RESTORE DEFAULT SETTINGS");
             Console.WriteLine("================================================================================");
             Console.ResetColor();
 
@@ -3238,7 +3238,7 @@ namespace RobloxNetworkTuner
             TunerState savedState = TunerStateStorage.LoadFromFile();
             if (savedState != null)
             {
-                Console.WriteLine(" [*] Found tuner_state.json snapshot. Symmetrically restoring baseline...");
+                Console.WriteLine(" [*] Found tuner_state.json snapshot. Restoring saved settings...");
                 SchedulingModule.Restore(savedState);
                 WifiOptimizationModule.Restore(savedState);
                 NdisOptimizationModule.Restore(savedState);
@@ -3396,7 +3396,7 @@ namespace RobloxNetworkTuner
             RunSilent("netsh.exe", "interface ip delete arpcache");
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\n [OK] Baseline restoration complete.");
+            Console.WriteLine("\n [OK] Default settings restored.");
             Console.ResetColor();
         }
 
@@ -3561,7 +3561,7 @@ namespace RobloxNetworkTuner
             }
 
             // State File
-            Console.WriteLine(" Tuner State File         : {0}", TunerStateStorage.StateFileExists() ? "Present (tuner_state.json)" : "None (Clean baseline)");
+            Console.WriteLine(" Tuner State File         : {0}", TunerStateStorage.StateFileExists() ? "Present (tuner_state.json)" : "None");
 
             Console.WriteLine("================================================================================");
         }
@@ -3571,13 +3571,13 @@ namespace RobloxNetworkTuner
             Console.WriteLine("Roblox Network Tuner [x64]");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  RobloxNetworkTuner.exe                   Launch interactive hands-free dark gaming GUI");
-            Console.WriteLine("  RobloxNetworkTuner.exe --console         Launch interactive terminal watchdog session");
-            Console.WriteLine("  RobloxNetworkTuner.exe --benchmark       Run automated latency & RFC 3550 jitter diagnostic");
-            Console.WriteLine("  RobloxNetworkTuner.exe --status          Inspect current kernel, NDIS, AFD, and network state");
-            Console.WriteLine("  RobloxNetworkTuner.exe --restore         Restore baseline system, driver & network settings");
-            Console.WriteLine("  RobloxNetworkTuner.exe --check-update    Check GitHub releases for tuner updates");
-            Console.WriteLine("  RobloxNetworkTuner.exe --update          Automatically download and apply latest release");
+            Console.WriteLine("  RobloxNetworkTuner.exe                   Launch graphical dashboard");
+            Console.WriteLine("  RobloxNetworkTuner.exe --console         Launch console watchdog session");
+            Console.WriteLine("  RobloxNetworkTuner.exe --benchmark       Run latency & jitter diagnostic");
+            Console.WriteLine("  RobloxNetworkTuner.exe --status          Show network and adapter configuration");
+            Console.WriteLine("  RobloxNetworkTuner.exe --restore         Restore default Windows network settings");
+            Console.WriteLine("  RobloxNetworkTuner.exe --check-update    Check for updates on GitHub");
+            Console.WriteLine("  RobloxNetworkTuner.exe --update          Download and apply latest update");
             Console.WriteLine("  RobloxNetworkTuner.exe --help            Display this help screen");
             Console.WriteLine();
             Console.WriteLine("Benchmark Options:");
