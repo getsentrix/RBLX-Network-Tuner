@@ -6,6 +6,11 @@ A lightweight Windows tool designed to eliminate random ping spikes, jitter, and
   <img src="assets/preview.png" alt="Roblox Network Tuner Interface" width="560" />
 </p>
 
+<p align="center">
+  <a href="https://getsentrix.github.io/RBLX-Network-Tuner/"><strong>🌐 Visit Live Showcase Website</strong></a> • 
+  <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/latest"><strong>📦 Download Latest Release (v2.2.0)</strong></a>
+</p>
+
 ---
 
 ## Why Does Roblox Lag On Windows?
