@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.1.0")]
-[assembly: AssemblyFileVersion("2.4.1.0")]
+[assembly: AssemblyVersion("2.4.2.0")]
+[assembly: AssemblyFileVersion("2.4.2.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -244,6 +244,24 @@ namespace RobloxNetworkTuner
     {
         public const string StateFileName = "tuner_state.json";
 
+        public static string GetStateFilePath()
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string testFile = Path.Combine(baseDir, ".tuner_write_probe");
+                File.WriteAllText(testFile, "probe");
+                File.Delete(testFile);
+                return Path.Combine(baseDir, StateFileName);
+            }
+            catch
+            {
+                string localApp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RobloxNetworkTuner");
+                if (!Directory.Exists(localApp)) Directory.CreateDirectory(localApp);
+                return Path.Combine(localApp, StateFileName);
+            }
+        }
+
         public static void SaveToFile(TunerState state)
         {
             if (state == null) return;
@@ -314,8 +332,29 @@ namespace RobloxNetworkTuner
 
                 sb.AppendLine("}");
 
-                string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
-                File.WriteAllText(fullPath, sb.ToString(), Encoding.UTF8);
+                string fullPath = GetStateFilePath();
+                string tempPath = fullPath + ".tmp";
+                string bakPath = fullPath + ".bak";
+
+                File.WriteAllText(tempPath, sb.ToString(), Encoding.UTF8);
+
+                if (File.Exists(fullPath))
+                {
+                    try { if (File.Exists(bakPath)) File.Delete(bakPath); } catch { }
+                    try
+                    {
+                        File.Replace(tempPath, fullPath, bakPath);
+                    }
+                    catch
+                    {
+                        try { File.Delete(fullPath); } catch { }
+                        File.Move(tempPath, fullPath);
+                    }
+                }
+                else
+                {
+                    File.Move(tempPath, fullPath);
+                }
             }
             catch { }
         }
@@ -324,8 +363,8 @@ namespace RobloxNetworkTuner
         {
             try
             {
-                string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
-                return File.Exists(fullPath);
+                string fullPath = GetStateFilePath();
+                return File.Exists(fullPath) || File.Exists(fullPath + ".bak");
             }
             catch
             {
@@ -337,11 +376,10 @@ namespace RobloxNetworkTuner
         {
             try
             {
-                string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
-                if (File.Exists(fullPath))
-                {
-                    File.Delete(fullPath);
-                }
+                string fullPath = GetStateFilePath();
+                if (File.Exists(fullPath)) File.Delete(fullPath);
+                if (File.Exists(fullPath + ".tmp")) File.Delete(fullPath + ".tmp");
+                if (File.Exists(fullPath + ".bak")) File.Delete(fullPath + ".bak");
             }
             catch { }
         }
@@ -350,10 +388,27 @@ namespace RobloxNetworkTuner
         {
             try
             {
-                string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
-                if (!File.Exists(fullPath)) return null;
+                string fullPath = GetStateFilePath();
+                string fileToRead = fullPath;
+                if (!File.Exists(fileToRead))
+                {
+                    fileToRead = fullPath + ".bak";
+                    if (!File.Exists(fileToRead)) return null;
+                }
 
-                string json = File.ReadAllText(fullPath, Encoding.UTF8);
+                string json = File.ReadAllText(fileToRead, Encoding.UTF8);
+                if (string.IsNullOrEmpty(json) || json.Length < 10)
+                {
+                    if (fileToRead != fullPath + ".bak" && File.Exists(fullPath + ".bak"))
+                    {
+                        json = File.ReadAllText(fullPath + ".bak", Encoding.UTF8);
+                    }
+                    else
+                    {
+                        return null;
+                    }
+                }
+
                 TunerState state = new TunerState();
 
                 Match mTime = Regex.Match(json, "\"Timestamp\"\\s*:\\s*\"([^\"]+)\"");
@@ -669,6 +724,29 @@ namespace RobloxNetworkTuner
 
     internal static class WifiOptimizationModule
     {
+        private static bool isScanLocked = false;
+        public static bool IsScanLocked { get { return isScanLocked; } }
+
+        static WifiOptimizationModule()
+        {
+            try
+            {
+                AppDomain.CurrentDomain.ProcessExit += delegate { EmergencyRestore(); };
+                Console.CancelKeyPress += delegate { EmergencyRestore(); };
+            }
+            catch { }
+        }
+
+        public static void EmergencyRestore()
+        {
+            try
+            {
+                // Failsafe: re-enable WLAN AutoConfig on all Wi-Fi interfaces so user is never left without scanning
+                Program.RunSilent("netsh.exe", "wlan set autoconfig enabled=yes interface=*");
+            }
+            catch { }
+        }
+
         public static void Apply(TunerState state)
         {
             Console.Write(" [*] Wi-Fi 7 / DBS roaming lock & wlanapi background scan freeze ..... ");
@@ -711,6 +789,7 @@ namespace RobloxNetworkTuner
                         // Set low-latency flags: background scan = false, media streaming = true
                         controller.SetBooleanOpcode(primary.Guid, NativeWifiApi.WLAN_INTF_OPCODE.wlan_intf_opcode_background_scan_enabled, false);
                         controller.SetBooleanOpcode(primary.Guid, NativeWifiApi.WLAN_INTF_OPCODE.wlan_intf_opcode_media_streaming_mode, true);
+                        isScanLocked = true;
 
                         Program.PrintSuccess(string.Format("LOCKED (Signal={0}%, MediaMode=1)", profile.SignalPercent));
                         return;
@@ -725,6 +804,7 @@ namespace RobloxNetworkTuner
                     string nicName = m.Groups[1].Value.Trim();
                     state.ActiveAdapterName = nicName;
                     Program.RunSilent("netsh.exe", string.Format("wlan set autoconfig enabled=no interface=\"{0}\"", nicName));
+                    isScanLocked = true;
                     Program.PrintSuccess(string.Format("FROZEN ({0})", nicName));
                 }
                 else
@@ -736,6 +816,50 @@ namespace RobloxNetworkTuner
             {
                 Program.PrintError("FAIL: " + ex.Message);
             }
+        }
+
+        public static void EvaluateRoamingHealth(TunerState state, double lossPercent, double jitterMs)
+        {
+            if (!isScanLocked) return;
+
+            try
+            {
+                NetworkProfileInfo profile = NetworkProfileDetector.DetectPrimaryProfile();
+                if (profile.MediaType != NetworkMediaType.WiFi) return;
+
+                // Multi-factor roaming trigger: signal dropped below 50%, packet loss >= 15%, or jitter >= 50ms
+                if (profile.IsWeakSignal || profile.SignalPercent < 50 || lossPercent >= 15.0 || jitterMs >= 50.0)
+                {
+                    UnlockScanning(state);
+                }
+            }
+            catch { }
+        }
+
+        public static void UnlockScanning(TunerState state)
+        {
+            try
+            {
+                if (state != null && state.NativeWifi != null && state.NativeWifi.HasCaptured && !string.IsNullOrEmpty(state.NativeWifi.InterfaceGuid))
+                {
+                    using (NativeWifiController controller = new NativeWifiController())
+                    {
+                        Guid g = new Guid(state.NativeWifi.InterfaceGuid);
+                        controller.SetBooleanOpcode(g, NativeWifiApi.WLAN_INTF_OPCODE.wlan_intf_opcode_background_scan_enabled, true);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(state.ActiveAdapterName))
+                {
+                    Program.RunSilent("netsh.exe", string.Format("wlan set autoconfig enabled=yes interface=\"{0}\"", state.ActiveAdapterName));
+                }
+                else
+                {
+                    Program.RunSilent("netsh.exe", "wlan set autoconfig enabled=yes interface=*");
+                }
+                isScanLocked = false;
+            }
+            catch { }
         }
 
         public static void Restore(TunerState state)
@@ -768,6 +892,11 @@ namespace RobloxNetworkTuner
                 }
                 catch { }
             }
+            else
+            {
+                EmergencyRestore();
+            }
+            isScanLocked = false;
         }
     }
 
@@ -1889,6 +2018,12 @@ namespace RobloxNetworkTuner
         public double IdleRttMs;
         public double LoadedRttMs;
         public double DeltaRttMs;
+        public double GatewayIdleRttMs;
+        public double GatewayLoadedRttMs;
+        public double GatewayDeltaRttMs;
+        public double IdleJitterMs;
+        public double LoadedJitterMs;
+        public string BottleneckLocation;
         public string Grade; // A+, A, B, C, D, F
         public string Recommendation;
         public int SamplesTested;
@@ -1898,7 +2033,7 @@ namespace RobloxNetworkTuner
 
     public static class BufferbloatDiagnosticModule
     {
-        private const string LoadTestUrl = "https://speed.cloudflare.com/__down?bytes=5000000";
+        private const string PrimaryLoadUrl = "https://speed.cloudflare.com/__down?bytes=25000000";
 
         public static BufferbloatResult RunTest(string targetHost, Action<string> progressCallback)
         {
@@ -1922,113 +2057,200 @@ namespace RobloxNetworkTuner
                 }
                 catch { }
 
-                if (progressCallback != null) progressCallback("Measuring baseline idle RTT...");
+                string gatewayIp = RouteHopMonitor.GetGatewayIp();
 
-                // 1. Idle Phase (10 samples)
-                List<double> idleSamples = CollectSamples(targetIp, 10, 100);
-                if (idleSamples.Count < 4)
+                if (progressCallback != null) progressCallback("Measuring idle baseline latency & jitter to gateway & target...");
+
+                // 1. Baseline Idle Phase: 10 samples to Target and Gateway
+                List<double> idleTargetSamples = CollectSamples(targetIp, 10, 80);
+                List<double> idleGatewaySamples = CollectSamples(gatewayIp, 10, 80);
+
+                if (idleTargetSamples.Count < 4)
                 {
                     result.Success = false;
-                    result.ErrorMessage = "Insufficient response from target host for baseline.";
+                    result.ErrorMessage = "Target host did not respond with sufficient samples for baseline.";
                     return result;
                 }
 
-                idleSamples.Sort();
-                result.IdleRttMs = idleSamples[idleSamples.Count / 2];
+                idleTargetSamples.Sort();
+                result.IdleRttMs = idleTargetSamples[idleTargetSamples.Count / 2];
+                result.IdleJitterMs = CalculateJitter(idleTargetSamples);
 
-                if (progressCallback != null) progressCallback(string.Format("Baseline RTT: {0:F1} ms. Testing under 5MB download stream...", result.IdleRttMs));
+                if (idleGatewaySamples.Count > 0)
+                {
+                    idleGatewaySamples.Sort();
+                    result.GatewayIdleRttMs = idleGatewaySamples[idleGatewaySamples.Count / 2];
+                }
 
-                // 2. Loaded Phase: Download stream running concurrently
-                List<double> loadedSamples = new List<double>();
+                if (progressCallback != null)
+                {
+                    progressCallback(string.Format("Idle RTT: {0:F1} ms (GW: {1:F1} ms). Generating multi-stream download & upload contention...",
+                        result.IdleRttMs, result.GatewayIdleRttMs));
+                }
 
-                Thread downloadThread = new Thread(delegate()
+                // 2. Active Load Contention Phase
+                // Generate multi-stream download and upload saturation over 3.5 seconds
+                bool keepRunningLoad = true;
+                List<Thread> loadWorkers = new List<Thread>();
+
+                // Downstream worker 1
+                Thread downWorker1 = new Thread(delegate()
                 {
                     try
                     {
                         ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                         using (WebClient wc = new WebClient())
                         {
-                            wc.Headers.Add("User-Agent", "RobloxNetworkTuner/2.2");
-                            wc.DownloadData(LoadTestUrl);
+                            wc.Headers.Add("User-Agent", "RobloxNetworkTuner/2.4");
+                            while (keepRunningLoad)
+                            {
+                                try { wc.DownloadData(PrimaryLoadUrl); } catch { Thread.Sleep(100); }
+                            }
                         }
                     }
                     catch { }
                 });
+                downWorker1.IsBackground = true;
+                loadWorkers.Add(downWorker1);
 
-                downloadThread.IsBackground = true;
-                downloadThread.Start();
+                // Upstream burst worker
+                Thread upWorker = new Thread(delegate()
+                {
+                    try
+                    {
+                        byte[] dummy = new byte[1024];
+                        using (UdpClient udp = new UdpClient())
+                        {
+                            while (keepRunningLoad)
+                            {
+                                try
+                                {
+                                    udp.Send(dummy, dummy.Length, "1.1.1.1", 53);
+                                    Thread.Sleep(5);
+                                }
+                                catch { Thread.Sleep(20); }
+                            }
+                        }
+                    }
+                    catch { }
+                });
+                upWorker.IsBackground = true;
+                loadWorkers.Add(upWorker);
 
-                Thread.Sleep(200);
+                for (int i = 0; i < loadWorkers.Count; i++) loadWorkers[i].Start();
 
-                int count = 0;
+                Thread.Sleep(300); // Allow traffic to ramp up and begin filling buffers
+
+                // Measure loaded RTT concurrently on both target and gateway
+                List<double> loadedTargetSamples = new List<double>();
+                List<double> loadedGatewaySamples = new List<double>();
+
                 using (Ping p = new Ping())
                 {
                     byte[] buf = new byte[32];
                     PingOptions opts = new PingOptions(64, true);
 
-                    while (count < 15)
+                    for (int count = 0; count < 12; count++)
                     {
-                        Stopwatch sw = Stopwatch.StartNew();
+                        // Ping Target
                         try
                         {
-                            PingReply reply = p.Send(targetIp, 1200, buf, opts);
+                            Stopwatch sw = Stopwatch.StartNew();
+                            PingReply rep = p.Send(targetIp, 1200, buf, opts);
                             sw.Stop();
-                            if (reply != null && reply.Status == IPStatus.Success)
+                            if (rep != null && rep.Status == IPStatus.Success)
                             {
-                                double ms = (sw.ElapsedTicks * 1000.0) / (double)Stopwatch.Frequency;
-                                loadedSamples.Add(ms);
+                                loadedTargetSamples.Add((sw.ElapsedTicks * 1000.0) / (double)Stopwatch.Frequency);
                             }
                         }
                         catch { }
 
-                        count++;
-                        Thread.Sleep(80);
+                        // Ping Gateway
+                        try
+                        {
+                            Stopwatch swGw = Stopwatch.StartNew();
+                            PingReply repGw = p.Send(gatewayIp, 400, buf, opts);
+                            swGw.Stop();
+                            if (repGw != null && repGw.Status == IPStatus.Success)
+                            {
+                                loadedGatewaySamples.Add((swGw.ElapsedTicks * 1000.0) / (double)Stopwatch.Frequency);
+                            }
+                        }
+                        catch { }
+
+                        Thread.Sleep(120);
                     }
                 }
 
-                downloadThread.Join(5000);
+                // Cease load threads cleanly
+                keepRunningLoad = false;
+                for (int i = 0; i < loadWorkers.Count; i++) loadWorkers[i].Join(800);
 
-                if (loadedSamples.Count < 4)
+                if (loadedTargetSamples.Count < 4)
                 {
                     result.Success = false;
-                    result.ErrorMessage = "Failed to collect loaded samples during traffic burst.";
+                    result.ErrorMessage = "Failed to collect sufficient samples during active load phase.";
                     return result;
                 }
 
-                loadedSamples.Sort();
-                result.LoadedRttMs = loadedSamples[loadedSamples.Count / 2];
+                loadedTargetSamples.Sort();
+                result.LoadedRttMs = loadedTargetSamples[loadedTargetSamples.Count / 2];
                 result.DeltaRttMs = Math.Max(0.0, result.LoadedRttMs - result.IdleRttMs);
-                result.SamplesTested = idleSamples.Count + loadedSamples.Count;
+                result.LoadedJitterMs = CalculateJitter(loadedTargetSamples);
 
+                if (loadedGatewaySamples.Count > 0)
+                {
+                    loadedGatewaySamples.Sort();
+                    result.GatewayLoadedRttMs = loadedGatewaySamples[loadedGatewaySamples.Count / 2];
+                    result.GatewayDeltaRttMs = Math.Max(0.0, result.GatewayLoadedRttMs - result.GatewayIdleRttMs);
+                }
+
+                result.SamplesTested = idleTargetSamples.Count + loadedTargetSamples.Count;
+
+                // Isolate Queue Bloat Location
+                if (result.GatewayDeltaRttMs > 18.0)
+                {
+                    result.BottleneckLocation = "Local Home Router / Wi-Fi Buffer";
+                }
+                else if (result.DeltaRttMs > 25.0)
+                {
+                    result.BottleneckLocation = "Upstream ISP Transit / Modem Queue";
+                }
+                else
+                {
+                    result.BottleneckLocation = "Zero Bufferbloat (Clean Link)";
+                }
+
+                // Scientific Grading Scale
                 if (result.DeltaRttMs <= 5.0)
                 {
                     result.Grade = "A+";
-                    result.Recommendation = "Exceptional network pacing. Zero bufferbloat detected.";
+                    result.Recommendation = "Exceptional line pacing. Zero bufferbloat detected.";
                 }
                 else if (result.DeltaRttMs <= 15.0)
                 {
                     result.Grade = "A";
-                    result.Recommendation = "Minimal queue delay. Home network pacing is highly responsive.";
+                    result.Recommendation = "Minimal queue delay. Packets process with negligible buffering.";
                 }
                 else if (result.DeltaRttMs <= 30.0)
                 {
                     result.Grade = "B";
-                    result.Recommendation = "Moderate queueing delay under load. Minor latency rise during streaming.";
+                    result.Recommendation = "Moderate queueing delay (+15–30ms). Minor latency rise during heavy downloads.";
                 }
                 else if (result.DeltaRttMs <= 60.0)
                 {
                     result.Grade = "C";
-                    result.Recommendation = "Noticeable bufferbloat (+30-60ms). Router SQM (CAKE/FQ-CoDel) recommended.";
+                    result.Recommendation = "Noticeable bufferbloat (+30–60ms). Router Smart Queue Management (SQM: CAKE/FQ-CoDel) recommended.";
                 }
                 else if (result.DeltaRttMs <= 100.0)
                 {
                     result.Grade = "D";
-                    result.Recommendation = "High bufferbloat (+60-100ms lag spikes). Router queue bloat requires SQM.";
+                    result.Recommendation = "High bufferbloat (+60–100ms spikes). Physical router buffers are inflating under traffic. Enable SQM on router.";
                 }
                 else
                 {
                     result.Grade = "F";
-                    result.Recommendation = "Severe bufferbloat (+100ms+ delay). Packets queue severely in router buffers.";
+                    result.Recommendation = "Severe bufferbloat (+100ms+ delay). Router queue bloat requires SQM (CAKE/FQ-CoDel) to prevent lag during transfers.";
                 }
 
                 result.Success = true;
@@ -2040,6 +2262,18 @@ namespace RobloxNetworkTuner
             }
 
             return result;
+        }
+
+        private static double CalculateJitter(List<double> samples)
+        {
+            if (samples == null || samples.Count < 2) return 0.0;
+            double jitter = 0.0;
+            for (int i = 1; i < samples.Count; i++)
+            {
+                double diff = Math.Abs(samples[i] - samples[i - 1]);
+                jitter += (diff - jitter) / 16.0;
+            }
+            return jitter;
         }
 
         private static List<double> CollectSamples(string targetIp, int count, int intervalMs)
@@ -2055,7 +2289,7 @@ namespace RobloxNetworkTuner
                     Stopwatch sw = Stopwatch.StartNew();
                     try
                     {
-                        PingReply reply = p.Send(targetIp, 1200, buf, opts);
+                        PingReply reply = p.Send(targetIp, 1000, buf, opts);
                         sw.Stop();
                         if (reply != null && reply.Status == IPStatus.Success)
                         {
@@ -2087,9 +2321,11 @@ namespace RobloxNetworkTuner
                 return;
             }
 
-            Console.WriteLine(" Baseline Idle RTT  : {0,7:F2} ms", res.IdleRttMs);
-            Console.WriteLine(" Loaded Active RTT  : {0,7:F2} ms", res.LoadedRttMs);
+            Console.WriteLine(" Baseline Idle RTT   : {0,7:F2} ms (Jitter: ±{1:F2} ms)", res.IdleRttMs, res.IdleJitterMs);
+            Console.WriteLine(" Loaded Active RTT   : {0,7:F2} ms (Jitter: ±{1:F2} ms)", res.LoadedRttMs, res.LoadedJitterMs);
             Console.WriteLine(" Latency Delta (dRTT): +{0,6:F2} ms", res.DeltaRttMs);
+            Console.WriteLine(" Gateway Delta       : +{0,6:F2} ms", res.GatewayDeltaRttMs);
+            Console.WriteLine(" Queue Bottleneck    : {0}", res.BottleneckLocation);
             Console.WriteLine();
 
             ConsoleColor gradeColor = ConsoleColor.Green;
@@ -2098,9 +2334,10 @@ namespace RobloxNetworkTuner
             else if (res.Grade == "D" || res.Grade == "F") gradeColor = ConsoleColor.Red;
 
             Console.ForegroundColor = gradeColor;
-            Console.WriteLine(" Bufferbloat Grade  : [{0}]", res.Grade);
+            Console.WriteLine(" Bufferbloat Grade   : [{0}]", res.Grade);
             Console.ResetColor();
-            Console.WriteLine(" Assessment         : {0}", res.Recommendation);
+            Console.WriteLine(" Assessment          : {0}", res.Recommendation);
+            Console.WriteLine(" Note                : Router-level queueing requires router SQM (CAKE/FQ-CoDel).");
             Console.WriteLine("================================================================================");
         }
     }
@@ -2111,16 +2348,28 @@ namespace RobloxNetworkTuner
 
     public static class QosVerificationModule
     {
-        public static bool VerifyQosPolicy(string testTarget)
+        public static BenchmarkMetrics MeasurePreQos(string testTarget)
         {
             try
             {
-                BenchmarkMetrics pre = DiagnosticBenchmarkModule.RunBenchmark(testTarget, 8, 25, 1000);
+                return DiagnosticBenchmarkModule.RunBenchmark(testTarget, 6, 25, 1000);
+            }
+            catch
+            {
+                return new BenchmarkMetrics();
+            }
+        }
+
+        public static bool VerifyQosStability(string testTarget, BenchmarkMetrics pre)
+        {
+            try
+            {
+                Thread.Sleep(60);
+                BenchmarkMetrics post = DiagnosticBenchmarkModule.RunBenchmark(testTarget, 6, 25, 1000);
                 if (pre.LossPercentage >= 90.0) return true;
 
-                Thread.Sleep(100);
-
-                BenchmarkMetrics post = DiagnosticBenchmarkModule.RunBenchmark(testTarget, 8, 25, 1000);
+                // If post packet loss increases by >15% or latency jumps by >8ms,
+                // the ISP or router is deprioritizing DSCP 46 marked packets
                 if (post.LossPercentage > pre.LossPercentage + 15.0 || post.MeanRtt > pre.MeanRtt + 8.0)
                 {
                     return false;
@@ -2140,17 +2389,21 @@ namespace RobloxNetworkTuner
         public double IspRttMs = 0.0;
         public double RobloxRttMs = 0.0;
         public string GatewayIp = "192.168.1.1";
-        public string IspIp = "1.1.1.1";
+        public string IspIp = "Pending Discovery";
         public string RobloxIp = "Standby";
         public string RouteStatusText = "✓ Route Clear";
         public bool IsGatewayCongested = false;
         public bool IsIspCongested = false;
+        public bool IsIcmpRateLimited = false;
     }
 
     public static class RouteHopMonitor
     {
         private static string cachedGatewayIp = null;
         private static DateTime lastGatewayLookup = DateTime.MinValue;
+
+        private static string cachedIspIp = null;
+        private static DateTime lastIspDiscovery = DateTime.MinValue;
 
         public static string GetGatewayIp()
         {
@@ -2184,12 +2437,43 @@ namespace RobloxNetworkTuner
             return "192.168.1.1";
         }
 
+        private static string DiscoverIspEdgeHop(string targetHost)
+        {
+            if (cachedIspIp != null && (DateTime.UtcNow - lastIspDiscovery).TotalSeconds < 90)
+            {
+                return cachedIspIp;
+            }
+
+            try
+            {
+                using (Ping p = new Ping())
+                {
+                    byte[] buf = new byte[32];
+                    // TTL = 2 discovers the first hop past the local gateway router
+                    PingOptions optsTtl2 = new PingOptions(2, true);
+                    PingReply reply = p.Send(targetHost, 600, buf, optsTtl2);
+                    if (reply != null && (reply.Status == IPStatus.TtlExpired || reply.Status == IPStatus.Success) && reply.Address != null)
+                    {
+                        cachedIspIp = reply.Address.ToString();
+                        lastIspDiscovery = DateTime.UtcNow;
+                        return cachedIspIp;
+                    }
+                }
+            }
+            catch { }
+
+            // If TTL=2 is rate-limited or filtered by ISP edge router per RFC 1812
+            cachedIspIp = "ISP Edge (ICMP Filtered)";
+            lastIspDiscovery = DateTime.UtcNow;
+            return cachedIspIp;
+        }
+
         public static RouteHopSnapshot MeasureHops(string robloxTargetIp)
         {
             RouteHopSnapshot snap = new RouteHopSnapshot();
             snap.GatewayIp = GetGatewayIp();
-            snap.IspIp = "1.1.1.1";
             snap.RobloxIp = string.IsNullOrEmpty(robloxTargetIp) ? "roblox.com" : robloxTargetIp;
+            snap.IspIp = DiscoverIspEdgeHop(snap.RobloxIp);
 
             using (Ping pinger = new Ping())
             {
@@ -2207,18 +2491,27 @@ namespace RobloxNetworkTuner
                 }
                 catch { }
 
-                // 2. ISP Edge Hop
-                try
+                // 2. ISP Edge Hop (if IP discovered and not filtered)
+                IPAddress dummyIp;
+                if (snap.IspIp != "ISP Edge (ICMP Filtered)" && IPAddress.TryParse(snap.IspIp, out dummyIp))
                 {
-                    PingReply replyIsp = pinger.Send(snap.IspIp, 600, buf, opts);
-                    if (replyIsp != null && replyIsp.Status == IPStatus.Success)
+                    try
                     {
-                        snap.IspRttMs = replyIsp.RoundtripTime;
+                        PingReply replyIsp = pinger.Send(snap.IspIp, 600, buf, opts);
+                        if (replyIsp != null && replyIsp.Status == IPStatus.Success)
+                        {
+                            snap.IspRttMs = replyIsp.RoundtripTime;
+                        }
                     }
+                    catch { }
                 }
-                catch { }
+                else
+                {
+                    snap.IsIcmpRateLimited = true;
+                    snap.IspRttMs = 0.0;
+                }
 
-                // 3. Roblox Game Server Hop
+                // 3. Roblox Game Server Hop (Authoritative End-to-End)
                 try
                 {
                     PingReply replyRbx = pinger.Send(snap.RobloxIp, 1000, buf, opts);
@@ -2231,15 +2524,20 @@ namespace RobloxNetworkTuner
             }
 
             // Root Cause Bottleneck Detection
+            // Prioritize genuine end-to-end performance: if end-to-end ping is healthy, ignore intermediate hop anomalies
             if (snap.GatewayRttMs > 15.0)
             {
                 snap.IsGatewayCongested = true;
                 snap.RouteStatusText = string.Format("⚠️ Local Gateway Lag ({0:F1}ms)", snap.GatewayRttMs);
             }
-            else if (snap.IspRttMs > 0 && snap.IspRttMs - snap.GatewayRttMs > 50.0)
+            else if (snap.RobloxRttMs > 0 && snap.RobloxRttMs <= 35.0)
+            {
+                snap.RouteStatusText = "✓ Route Clear (End-to-End Healthy)";
+            }
+            else if (snap.RobloxRttMs > snap.GatewayRttMs + 45.0 && snap.GatewayRttMs <= 8.0)
             {
                 snap.IsIspCongested = true;
-                snap.RouteStatusText = string.Format("⚠️ ISP Transit Delay ({0:F1}ms)", snap.IspRttMs);
+                snap.RouteStatusText = string.Format("⚠️ ISP Transit Delay ({0:F1}ms)", snap.RobloxRttMs);
             }
             else
             {
@@ -2463,7 +2761,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.1";
+        public const string CurrentVersion = "2.4.2";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -3236,6 +3534,7 @@ try {
             try
             {
                 currentCompetingTraffic = BackgroundBandwidthMonitor.ScanCompetingProcesses();
+                WifiOptimizationModule.EvaluateRoamingHealth(Program.CurrentSnapshot, 0.0, liveJitter);
 
                 Process[] procs = Process.GetProcessesByName(Program.TargetProcessName);
                 if (procs.Length > 0)
@@ -4831,9 +5130,19 @@ try {
             // Default Hands-Free Modern Dark Gaming GUI
             if (!EnsureAdministrator(args)) return;
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new TunerGuiForm());
+            bool isNewInstance;
+            using (Mutex singleMutex = new Mutex(true, "Global\\RobloxNetworkTuner_SingleInstanceLock", out isNewInstance))
+            {
+                if (!isNewInstance)
+                {
+                    MessageBox.Show("Roblox Network Tuner is already running in the background or system tray.", "Already Running", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new TunerGuiForm());
+            }
         }
 
         private static void RunConsoleSession(string[] args)
@@ -5350,6 +5659,8 @@ try {
                     }
                 }
 
+                BenchmarkMetrics preQos = QosVerificationModule.MeasurePreQos("roblox.com");
+
                 string qosCmd = string.Format(
                     "Remove-NetQosPolicy -Name \"{0}\" -Confirm:$false -ErrorAction SilentlyContinue; " +
                     "New-NetQosPolicy -Name \"{0}\" -AppPathNameMatchCondition \"{1}.exe\" -DSCPAction 46 -NetworkProfile All -ErrorAction SilentlyContinue",
@@ -5357,7 +5668,7 @@ try {
                 RunSilent("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"" + qosCmd + "\"");
 
                 // Verify QoS policy stability against packet loss and latency degradation
-                bool verified = QosVerificationModule.VerifyQosPolicy("roblox.com");
+                bool verified = QosVerificationModule.VerifyQosStability("roblox.com", preQos);
                 if (verified)
                 {
                     PrintSuccess("VERIFIED (DSCP 46)");

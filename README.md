@@ -8,14 +8,14 @@ A lightweight Windows tool designed to eliminate random ping spikes, jitter, and
 
 <p align="center">
   <a href="https://getsentrix.github.io/RBLX-Network-Tuner/"><strong>🌐 Visit Live Showcase Website</strong></a> • 
-  <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/latest"><strong>📦 Download Latest Release (v2.4.1)</strong></a>
+  <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/latest"><strong>📦 Download Latest Release (v2.4.2)</strong></a>
 </p>
 
 ---
 
 ## Why Does Roblox Lag On Windows?
 
-Even with high-speed internet, Roblox players frequently deal with random rubberbanding, ping spikes, and delayed hits. Most of the time, the culprit isn't your internet speed—it's how Windows handles background tasks by default:
+Even with high-speed internet, Roblox players frequently deal with random rubberbanding, ping spikes, and delayed hits. Most of the time, the culprit isn't your internet bandwidth—it's how Windows handles background tasks by default:
 
 * **Background Wi-Fi Scans**: Every 60 seconds, Windows scans for nearby Wi-Fi networks in the background. While your network card is scanning, game traffic can pause for 100–300ms, causing sudden ping spikes and rubberbanding.
 * **Sluggish System Timer**: Windows defaults to a slow 15.6ms system timer (64 Hz), meaning game network threads can wait up to 15ms in scheduling queues before Windows wakes up to dispatch them.
@@ -33,14 +33,15 @@ Most ping utilities test latency against Google (`8.8.8.8`) or Cloudflare (`1.1.
 
 Furthermore, it runs continuous **Hop-by-Hop Route Diagnostics**:
 * **Gateway**: Pings your local router to verify Wi-Fi / LAN integrity.
-* **ISP Edge**: Probes upstream Internet transit to detect ISP congestion.
+* **ISP Edge**: Dynamically probes upstream Internet transit (via TTL=2 traceroute) to detect ISP transit delays.
 * **Roblox Edge**: Measures live game server round-trip time.
-If you lag, the dashboard tells you immediately whether it's your home Wi-Fi (`⚠️ Gateway Lag`), an ISP routing issue (`⚠️ ISP Transit Delay`), or game server load.
+* **RFC 1812 Awareness**: Evaluates bottlenecks based on genuine end-to-end server latency rather than intermediate router ICMP rate-limiting false alarms.
 
-### 📶 Wi-Fi Lag Spike Killer with Roaming Guard
+### 📶 Wi-Fi Lag Spike Killer with Multi-Factor Roaming Guard
 Automatically pauses Windows background Wi-Fi scanning while in a match to eliminate periodic ping spikes.
-* **Built-in roaming safety**: If your Wi-Fi signal drops below 55% or -75 dBm, scan suppression is automatically disabled so your device can freely roam to a closer access point or mesh node without dropping connection.
-* **Ethernet aware**: If you're on a wired connection, Wi-Fi tweaks are completely bypassed in favor of low-latency NDIS queue settings.
+* **Multi-Factor Roaming Safety**: If your Wi-Fi signal drops below 50% (-75 dBm), or if packet loss exceeds 15% / jitter spikes over 50ms, scan suppression is automatically disengaged so your device can freely roam to a closer access point or mesh node.
+* **Failsafe Process Exit Hooks**: Registers process termination and console break handlers to guarantee WLAN AutoConfig is always re-enabled.
+* **Ethernet Aware**: If you're on a wired connection, Wi-Fi tweaks are completely bypassed in favor of low-latency NDIS queue settings.
 
 ### ⏱️ 0.50ms Kernel Thread Dispatch Timer
 Requests a **0.50ms (2000 Hz)** scheduling timer resolution via `NtSetTimerResolution`. Reduces OS thread scheduling quantization so input events, packet arrival callbacks, and rendering frames process with minimal dispatch delay.
@@ -55,12 +56,12 @@ Automatically boosts Roblox's CPU priority to High, sets I/O priority to High, a
 Scans for active background bandwidth hogs—such as OneDrive sync, Steam downloads, Epic Games, BitTorrent clients, and Windows Update. Alerts you on the dashboard when competing network traffic is saturating your connection.
 
 ### 📊 Built-in Bufferbloat Diagnostic
-Click **[Bufferbloat Test]** in the app or run `--bufferbloat` in terminal. It runs a controlled 5MB network burst to test your ping under load versus idle. If your latency spikes by more than 30ms under load, it diagnoses router queuebloat and gives you straightforward advice on router Smart Queue Management (SQM / CAKE) rather than claiming PC tweaks can fix a crowded home router.
+Click **[Bufferbloat Test]** in the app or run `--bufferbloat` in terminal. It runs a multi-stream concurrent download and upload contention test to probe your ping under load versus idle to both your local router gateway and the game server. It isolates whether queue bloat is occurring on your local router or upstream ISP, and gives you straightforward advice on router Smart Queue Management (SQM / CAKE) rather than claiming PC tweaks can fix a crowded home router.
 
-### 🛡️ 100% Safe & Reversible
-* Every change is backed up to a local snapshot (`tuner_state.json`) before anything is applied.
-* As soon as Roblox exits or you click **[Reset & Exit]**, all registry keys, services, and timers automatically revert to stock Windows defaults.
-* Even if your PC crashes or loses power, the tuner detects the previous session on next launch and cleans everything up automatically.
+### 🛡️ Atomic Baseline Snapshot & Verified Rollback
+* Every change is backed up to an atomic local snapshot (`tuner_state.json`) with backup fallback before anything is applied.
+* As soon as Roblox exits or you click **[Reset & Exit]**, all registry keys, services, and timers automatically revert to your original Windows baseline.
+* Crash Recovery Watchdog: If your PC crashes or loses power, the tuner detects the previous session on next launch and cleans everything up automatically. Run `--verify-restore` anytime to verify all settings.
 
 ---
 

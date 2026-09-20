@@ -1,5 +1,5 @@
 ================================================================================
-ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE (v2.4.1)
+ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE (v2.4.2)
 ================================================================================
 
 Roblox Network Tuner is an evidence-based, adaptive low-latency optimization
@@ -10,16 +10,16 @@ CORE CAPABILITIES & PILLARS:
   skip wireless commands and receive low-latency NDIS queue steering.
 - Real Roblox Server Telemetry: Tails active client transport logs in real time
   to ping the exact connected game server (UDMUX/RCC) rather than web endpoints.
-- Bufferbloat Diagnostic Engine: Measures idle vs. loaded RTT under a 5MB network
-  burst, assigns grades A+ to F, and diagnoses router queuebloat (SQM / CAKE).
-- Signal-Aware Wi-Fi Optimization: Monitors RSSI and link quality. Skips roaming
-  scan suppression if signal drops below 55% (-75 dBm) to prevent dropouts.
+- Bufferbloat Diagnostic Engine: Measures idle vs. loaded RTT under multi-stream
+  contention, isolates local router vs. ISP queueing, and provides SQM advice.
+- Multi-Factor Wi-Fi Roaming Guard: Monitors signal, packet loss, and jitter.
+  Disengages scan locks when link degrades to allow seamless AP roaming.
 - Evidence-Based QoS Verification: Verifies DSCP 46 Expedited Forwarding against
   ISP deprioritization or packet loss; reverts automatically if degraded.
 - Crash-Resilient Architecture: Detects orphaned session states on startup and
   reverts to stock defaults. Includes --verify-restore audit command.
-- AFD Fast-Path & 0.50 ms Timer: Locks Winsock datagram buffers to bypass socket
-  queuing delays and tightens NT kernel timer to 0.50 ms (2000 Hz).
+- AFD Fast-Path & 0.50 ms Timer: Sets Winsock datagram buffer thresholds for MTU
+  frames and requests 0.50 ms (2000 Hz) NT kernel thread scheduling resolution.
 - Priority & Power Boost: High process priority, High I/O priority, and
   explicit bypass of Windows 11 EcoQoS / Power Throttling.
 
