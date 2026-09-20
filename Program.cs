@@ -2809,8 +2809,7 @@ try {
                     FileName = "powershell.exe",
                     Arguments = string.Format("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{0}\"", scriptPath),
                     CreateNoWindow = true,
-                    UseShellExecute = true,
-                    Verb = "runas"
+                    UseShellExecute = false
                 };
                 Process.Start(psi);
 
