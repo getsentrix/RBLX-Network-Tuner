@@ -94,6 +94,8 @@ RobloxNetworkTuner.exe                   Launch graphical dashboard (default)
 RobloxNetworkTuner.exe --status          Display current network, adapter, and session state
 RobloxNetworkTuner.exe --bufferbloat     Run loaded vs. idle bufferbloat diagnostic
 RobloxNetworkTuner.exe --benchmark       Run RFC 3550 latency and jitter diagnostic
+RobloxNetworkTuner.exe --check-update    Check GitHub for newer releases without modifying files
+RobloxNetworkTuner.exe --update          Automatically download and apply latest release in-place
 RobloxNetworkTuner.exe --verify-restore  Audit all settings against stock Windows defaults
 RobloxNetworkTuner.exe --restore         Manually restore default Windows network settings
 RobloxNetworkTuner.exe --help            Display help screen

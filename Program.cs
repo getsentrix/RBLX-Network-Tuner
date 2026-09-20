@@ -2252,14 +2252,36 @@ namespace RobloxNetworkTuner
 
         public class ReleaseInfo
         {
-            public string TagName;
-            public Version ReleaseVersion;
-            public string ExeDownloadUrl;
-            public string SetupDownloadUrl;
-            public string ReleaseNotes;
+            public string TagName = "";
+            public Version ReleaseVersion = new Version(0, 0, 0, 0);
+            public string ExeDownloadUrl = "";
+            public string SetupDownloadUrl = "";
+            public string ReleaseNotes = "";
         }
 
-        public static void CheckForUpdateAsync()
+        public static Version ParseVersionSafe(string verStr)
+        {
+            if (string.IsNullOrEmpty(verStr)) return new Version(0, 0, 0, 0);
+            try
+            {
+                string clean = verStr.Trim().TrimStart('v', 'V');
+                int dashIdx = clean.IndexOf('-');
+                if (dashIdx >= 0) clean = clean.Substring(0, dashIdx);
+
+                string[] parts = clean.Split('.');
+                int major = parts.Length > 0 ? int.Parse(parts[0]) : 0;
+                int minor = parts.Length > 1 ? int.Parse(parts[1]) : 0;
+                int build = parts.Length > 2 ? int.Parse(parts[2]) : 0;
+                int rev = parts.Length > 3 ? int.Parse(parts[3]) : 0;
+                return new Version(major, minor, build, rev);
+            }
+            catch
+            {
+                return new Version(0, 0, 0, 0);
+            }
+        }
+
+        public static void CheckForUpdateSilently(Action<ReleaseInfo, bool> callback)
         {
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -2268,21 +2290,41 @@ namespace RobloxNetworkTuner
                     ReleaseInfo rel = FetchLatestRelease();
                     if (rel != null && rel.ReleaseVersion != null)
                     {
-                        Version curVer = new Version(CurrentVersion);
-                        if (rel.ReleaseVersion > curVer)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine("\n [UPDATE] New release available: {0} (Current: v{1})", rel.TagName, CurrentVersion);
-                            Console.WriteLine("          Run: RobloxNetworkTuner.exe --update to install automatically.");
-                            Console.ResetColor();
-                        }
+                        Version curVer = ParseVersionSafe(CurrentVersion);
+                        bool isNewer = rel.ReleaseVersion > curVer;
+                        if (callback != null) callback(rel, isNewer);
+                    }
+                    else
+                    {
+                        if (callback != null) callback(null, false);
                     }
                 }
-                catch { }
+                catch
+                {
+                    if (callback != null) callback(null, false);
+                }
             });
         }
 
-        public static void CheckForUpdate(bool autoUpdate)
+        public static void CheckForUpdateAsync()
+        {
+            CheckForUpdateSilently(delegate(ReleaseInfo rel, bool available)
+            {
+                if (available && rel != null)
+                {
+                    try
+                    {
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine("\n [UPDATE] New release available: {0} (Current: v{1})", rel.TagName, CurrentVersion);
+                        Console.WriteLine("          Run: RobloxNetworkTuner.exe --update to install automatically.");
+                        Console.ResetColor();
+                    }
+                    catch { }
+                }
+            });
+        }
+
+        public static void CheckForUpdateCli(bool autoUpdate)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("================================================================================");
@@ -2297,11 +2339,11 @@ namespace RobloxNetworkTuner
                 ReleaseInfo rel = FetchLatestRelease();
                 if (rel == null || rel.ReleaseVersion == null)
                 {
-                    Program.PrintInfo("UP TO DATE / NO RELEASES FOUND");
+                    Program.PrintError("FAIL: Unable to query GitHub release metadata.");
                     return;
                 }
 
-                Version curVer = new Version(CurrentVersion);
+                Version curVer = ParseVersionSafe(CurrentVersion);
                 if (rel.ReleaseVersion > curVer)
                 {
                     Program.PrintSuccess("UPDATE AVAILABLE (" + rel.TagName + ")");
@@ -2315,11 +2357,11 @@ namespace RobloxNetworkTuner
 
                     if (autoUpdate)
                     {
-                        PerformUpdateWithRelease(rel);
+                        PerformUpdateWithHandoff(rel, false, null);
                     }
                     else
                     {
-                        Console.WriteLine("\n Run 'RobloxNetworkTuner.exe --update' to apply this update.");
+                        Console.WriteLine("\n Run 'RobloxNetworkTuner.exe --update' to apply this update automatically.");
                     }
                 }
                 else
@@ -2329,11 +2371,11 @@ namespace RobloxNetworkTuner
             }
             catch (Exception ex)
             {
-                Program.PrintInfo("SKIPPED (" + ex.Message + ")");
+                Program.PrintError("FAIL: " + ex.Message);
             }
         }
 
-        public static void PerformUpdate()
+        public static void PerformUpdateCli(bool force)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("================================================================================");
@@ -2341,26 +2383,35 @@ namespace RobloxNetworkTuner
             Console.WriteLine(" Current Version: v{0}", CurrentVersion);
             Console.WriteLine("================================================================================");
             Console.ResetColor();
-            Console.Write(" [*] Fetching latest release metadata from GitHub ... ");
+            Console.Write(" [*] Querying latest release from GitHub ... ");
 
             try
             {
                 ReleaseInfo rel = FetchLatestRelease();
                 if (rel == null || rel.ReleaseVersion == null)
                 {
-                    Program.PrintInfo("NO RELEASES FOUND");
+                    Program.PrintError("FAIL: Unable to retrieve release information from GitHub.");
                     return;
                 }
 
-                Version curVer = new Version(CurrentVersion);
-                if (rel.ReleaseVersion <= curVer)
+                Version curVer = ParseVersionSafe(CurrentVersion);
+                if (rel.ReleaseVersion <= curVer && !force)
                 {
-                    Program.PrintSuccess("ALREADY UP TO DATE (v" + CurrentVersion + ")");
+                    Program.PrintSuccess("ALREADY UP TO DATE (v" + CurrentVersion + " is current)");
+                    Console.WriteLine(" [*] To force a re-download and reinstall, run: RobloxNetworkTuner.exe --update --force");
                     return;
                 }
 
-                Program.PrintSuccess("FOUND " + rel.TagName);
-                PerformUpdateWithRelease(rel);
+                if (rel.ReleaseVersion > curVer)
+                {
+                    Program.PrintSuccess("NEW RELEASE AVAILABLE: " + rel.TagName);
+                }
+                else
+                {
+                    Program.PrintSuccess("FORCE REINSTALLING: " + rel.TagName);
+                }
+
+                PerformUpdateWithHandoff(rel, false, null);
             }
             catch (Exception ex)
             {
@@ -2368,69 +2419,138 @@ namespace RobloxNetworkTuner
             }
         }
 
-        private static void PerformUpdateWithRelease(ReleaseInfo rel)
+        public static bool PerformUpdateWithHandoff(ReleaseInfo rel, bool isGui, Action<string> statusCallback)
         {
-            if (string.IsNullOrEmpty(rel.ExeDownloadUrl))
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine(" [!] No standalone RobloxNetworkTuner.exe asset in release {0}.", rel.TagName);
-                Console.ResetColor();
-                return;
-            }
-
-            Console.Write(" [*] Downloading updated binary payload ... ");
             string currentExe = Process.GetCurrentProcess().MainModule.FileName;
             string tempDownload = Path.Combine(Path.GetTempPath(), "RobloxNetworkTuner_update.exe");
-            string backupExe = currentExe + ".old";
 
             try
             {
+                if (string.IsNullOrEmpty(rel.ExeDownloadUrl))
+                {
+                    string repo = GetRepoName();
+                    rel.ExeDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTuner.exe", repo, rel.TagName);
+                }
+
+                if (statusCallback != null) statusCallback("Downloading update " + rel.TagName + "...");
+                else Console.Write(" [*] Downloading updated binary from GitHub ... ");
+
+                if (File.Exists(tempDownload))
+                {
+                    try { File.Delete(tempDownload); } catch { }
+                }
+
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                 using (WebClient wc = new WebClient())
                 {
-                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.0");
+                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
                     wc.DownloadFile(rel.ExeDownloadUrl, tempDownload);
                 }
 
                 FileInfo fi = new FileInfo(tempDownload);
-                if (!fi.Exists || fi.Length < 10000)
+                if (!fi.Exists || fi.Length < 20000)
                 {
-                    throw new IOException("Downloaded update file is invalid or corrupted.");
-                }
-                Program.PrintSuccess(string.Format("DONE ({0:N0} bytes)", fi.Length));
-
-                Console.Write(" [*] Applying in-place binary swap ... ");
-                if (File.Exists(backupExe))
-                {
-                    try { File.Delete(backupExe); } catch { }
+                    throw new IOException("Downloaded update file is invalid or incomplete.");
                 }
 
-                File.Move(currentExe, backupExe);
-                File.Move(tempDownload, currentExe);
-                Program.PrintSuccess("DONE");
+                if (statusCallback != null) statusCallback("Update downloaded (" + (fi.Length / 1024) + " KB). Restarting...");
+                else Program.PrintSuccess(string.Format("DONE ({0:N0} bytes)", fi.Length));
 
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("\n================================================================================");
-                Console.WriteLine(" SUCCESS: Updated Roblox Network Tuner to {0}!", rel.TagName);
-                Console.WriteLine(" Backup of previous binary saved to: {0}.old", Path.GetFileName(currentExe));
-                Console.WriteLine("================================================================================");
-                Console.ResetColor();
+                // 1. Safely restore network and system settings before exiting
+                if (statusCallback == null) Console.Write(" [*] Restoring network settings and initiating handoff ... ");
+                Program.RestoreAll();
+
+                // 2. Also update setup binary in the installation folder if it exists
+                string currentDir = Path.GetDirectoryName(currentExe);
+                string setupInDir = Path.Combine(currentDir, "RobloxNetworkTunerSetup.exe");
+                string setupScriptPart = "";
+                if (File.Exists(setupInDir))
+                {
+                    if (string.IsNullOrEmpty(rel.SetupDownloadUrl))
+                    {
+                        string repo = GetRepoName();
+                        rel.SetupDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTunerSetup.exe", repo, rel.TagName);
+                    }
+
+                    string tempSetup = Path.Combine(Path.GetTempPath(), "RobloxNetworkTunerSetup_update.exe");
+                    try
+                    {
+                        using (WebClient wcSetup = new WebClient())
+                        {
+                            wcSetup.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
+                            wcSetup.DownloadFile(rel.SetupDownloadUrl, tempSetup);
+                        }
+                        if (File.Exists(tempSetup) && new FileInfo(tempSetup).Length > 20000)
+                        {
+                            setupScriptPart = string.Format("Copy-Item -Force -Path '{0}' -Destination '{1}'; Remove-Item -Force -Path '{0}' -ErrorAction SilentlyContinue; ", tempSetup, setupInDir);
+                        }
+                    }
+                    catch { }
+                }
+
+                // 3. Update uninstall display version in registry if installed
+                try
+                {
+                    using (RegistryKey unKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RobloxNetworkTuner", true))
+                    {
+                        if (unKey != null)
+                        {
+                            unKey.SetValue("DisplayVersion", rel.TagName.TrimStart('v', 'V'), RegistryValueKind.String);
+                        }
+                    }
+                }
+                catch { }
+
+                // 4. Detached PowerShell script:
+                // Waits for current process to exit, copies the new exe over the current exe, and restarts it
+                string handoffScript = string.Format(
+                    "$ErrorActionPreference = 'Stop'; " +
+                    "Wait-Process -Id {0}; " +
+                    "Start-Sleep -Milliseconds 500; " +
+                    "Copy-Item -Force -Path '{1}' -Destination '{2}'; " +
+                    "Remove-Item -Force -Path '{1}' -ErrorAction SilentlyContinue; " +
+                    "{3}" +
+                    "Start-Process -FilePath '{2}'",
+                    Process.GetCurrentProcess().Id,
+                    tempDownload,
+                    currentExe,
+                    setupScriptPart);
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -WindowStyle Hidden -Command \"" + handoffScript + "\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+
+                if (statusCallback == null) Program.PrintSuccess("HANDOFF STARTED");
+
+                // Exit process so PowerShell script can overwrite currentExe cleanly
+                if (isGui)
+                {
+                    Application.Exit();
+                }
+                else
+                {
+                    Environment.Exit(0);
+                }
+                return true;
             }
             catch (Exception ex)
             {
-                Program.PrintError("FAIL: " + ex.Message);
-                if (!File.Exists(currentExe) && File.Exists(backupExe))
-                {
-                    try { File.Move(backupExe, currentExe); } catch { }
-                }
+                if (statusCallback != null) statusCallback("Update failed: " + ex.Message);
+                else Program.PrintError("FAIL: " + ex.Message);
+                return false;
             }
         }
 
-        private static ReleaseInfo FetchLatestRelease()
+        private static string GetRepoName()
         {
+            string repo = DefaultGitHubRepo;
             try
             {
-                string repo = DefaultGitHubRepo;
                 using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\RobloxNetworkTuner"))
                 {
                     if (k != null)
@@ -2442,14 +2562,23 @@ namespace RobloxNetworkTuner
                         }
                     }
                 }
+            }
+            catch { }
+            return repo;
+        }
 
+        public static ReleaseInfo FetchLatestRelease()
+        {
+            try
+            {
+                string repo = GetRepoName();
                 string apiUrl = string.Format("https://api.github.com/repos/{0}/releases/latest", repo);
 
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                 string json;
                 using (WebClient wc = new WebClient())
                 {
-                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.0");
+                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
                     wc.Headers.Add("Accept", "application/vnd.github.v3+json");
                     json = wc.DownloadString(apiUrl);
                 }
@@ -2461,35 +2590,39 @@ namespace RobloxNetworkTuner
                 if (tagMatch.Success)
                 {
                     info.TagName = tagMatch.Groups[1].Value.Trim();
-                    string cleanVer = info.TagName.TrimStart('v', 'V');
-                    Version v;
-                    if (Version.TryParse(cleanVer, out v))
+                    info.ReleaseVersion = ParseVersionSafe(info.TagName);
+                }
+
+                Match nameMatch = Regex.Match(json, @"""name""\s*:\s*""([^""]+)""");
+                if (nameMatch.Success)
+                {
+                    info.ReleaseNotes = nameMatch.Groups[1].Value;
+                }
+
+                // Match specific asset URLs
+                MatchCollection assetMatches = Regex.Matches(json, @"\{[^{}]*""name""\s*:\s*""([^""]+)""[^{}]*""browser_download_url""\s*:\s*""([^""]+)""[^{}]*\}");
+                foreach (Match m in assetMatches)
+                {
+                    string name = m.Groups[1].Value;
+                    string url = m.Groups[2].Value;
+                    if (string.Equals(name, "RobloxNetworkTuner.exe", StringComparison.OrdinalIgnoreCase))
                     {
-                        info.ReleaseVersion = v;
+                        info.ExeDownloadUrl = url;
                     }
-                    else if (cleanVer.Split('.').Length == 2)
+                    else if (string.Equals(name, "RobloxNetworkTunerSetup.exe", StringComparison.OrdinalIgnoreCase))
                     {
-                        Version.TryParse(cleanVer + ".0", out v);
-                        info.ReleaseVersion = v;
+                        info.SetupDownloadUrl = url;
                     }
                 }
 
-                Match exeMatch = Regex.Match(json, @"""browser_download_url""\s*:\s*""([^""]*RobloxNetworkTuner\.exe)""");
-                if (exeMatch.Success)
+                // Fallbacks if assets array was omitted or formatted differently
+                if (string.IsNullOrEmpty(info.ExeDownloadUrl) && !string.IsNullOrEmpty(info.TagName))
                 {
-                    info.ExeDownloadUrl = exeMatch.Groups[1].Value;
+                    info.ExeDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTuner.exe", repo, info.TagName);
                 }
-
-                Match setupMatch = Regex.Match(json, @"""browser_download_url""\s*:\s*""([^""]*RobloxNetworkTunerSetup\.exe)""");
-                if (setupMatch.Success)
+                if (string.IsNullOrEmpty(info.SetupDownloadUrl) && !string.IsNullOrEmpty(info.TagName))
                 {
-                    info.SetupDownloadUrl = setupMatch.Groups[1].Value;
-                }
-
-                Match bodyMatch = Regex.Match(json, @"""name""\s*:\s*""([^""]+)""");
-                if (bodyMatch.Success)
-                {
-                    info.ReleaseNotes = bodyMatch.Groups[1].Value;
+                    info.SetupDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTunerSetup.exe", repo, info.TagName);
                 }
 
                 return info;
@@ -2530,15 +2663,21 @@ namespace RobloxNetworkTuner
 
         private Rectangle rectBtnClose = new Rectangle(580, 16, 26, 26);
         private Rectangle rectBtnMin = new Rectangle(546, 16, 26, 26);
+        private Rectangle rectBtnVersion = new Rectangle(340, 16, 68, 20);
         private Rectangle rectBtnBufferbloat = new Rectangle(20, 596, 180, 42);
         private Rectangle rectBtnTray = new Rectangle(210, 596, 190, 42);
         private Rectangle rectBtnExit = new Rectangle(410, 596, 190, 42);
 
         private bool hoverBtnClose = false;
         private bool hoverBtnMin = false;
+        private bool hoverBtnVersion = false;
         private bool hoverBtnBufferbloat = false;
         private bool hoverBtnTray = false;
         private bool hoverBtnExit = false;
+
+        private bool isUpdateAvailable = false;
+        private bool isCheckingForUpdate = false;
+        private GitHubUpdateModule.ReleaseInfo latestRelease = null;
 
         public TunerGuiForm()
         {
@@ -2567,7 +2706,9 @@ namespace RobloxNetworkTuner
             // Tray Icon & Menu
             this.trayMenu = new ContextMenuStrip();
             ToolStripMenuItem itemShow = new ToolStripMenuItem("Show Dashboard", null, delegate { ShowDashboard(); });
-            ToolStripMenuItem itemUpdate = new ToolStripMenuItem("Check for Updates", null, delegate { GitHubUpdateModule.CheckForUpdate(true); });
+            ToolStripMenuItem itemUpdate = new ToolStripMenuItem("Check for Updates", null, delegate {
+                this.BeginInvoke((MethodInvoker)delegate { TriggerUpdateCheckGui(true); });
+            });
             ToolStripMenuItem itemExit = new ToolStripMenuItem("Reset & Exit", null, delegate { SafeExit(); });
             this.trayMenu.Items.Add(itemShow);
             this.trayMenu.Items.Add(itemUpdate);
@@ -2628,9 +2769,30 @@ namespace RobloxNetworkTuner
                     Program.ApplyAll();
                     isTuningApplied = true;
 
-                    // 3. Trigger initial telemetry & update check
+                    // 3. Trigger initial telemetry
                     PingEdgeTarget();
-                    GitHubUpdateModule.CheckForUpdateAsync();
+
+                    // 4. Check for updates silently in background
+                    GitHubUpdateModule.CheckForUpdateSilently(delegate(GitHubUpdateModule.ReleaseInfo rel, bool available)
+                    {
+                        if (available && rel != null)
+                        {
+                            try
+                            {
+                                this.BeginInvoke((MethodInvoker)delegate
+                                {
+                                    this.isUpdateAvailable = true;
+                                    this.latestRelease = rel;
+                                    this.Invalidate(rectBtnVersion);
+                                    if (this.trayIcon != null && this.trayIcon.Visible)
+                                    {
+                                        this.trayIcon.ShowBalloonTip(4000, "Update Available", "Roblox Network Tuner " + rel.TagName + " is available! Click to update.", ToolTipIcon.Info);
+                                    }
+                                });
+                            }
+                            catch { }
+                        }
+                    });
 
                     this.BeginInvoke((MethodInvoker)delegate
                     {
@@ -2787,6 +2949,11 @@ namespace RobloxNetworkTuner
                     this.WindowState = FormWindowState.Minimized;
                     return;
                 }
+                if (rectBtnVersion.Contains(e.Location))
+                {
+                    TriggerUpdateCheckGui(false);
+                    return;
+                }
                 if (rectBtnBufferbloat.Contains(e.Location))
                 {
                     if (!isBufferbloatRunning)
@@ -2866,6 +3033,9 @@ namespace RobloxNetworkTuner
             bool hMin = rectBtnMin.Contains(e.Location);
             if (hMin != hoverBtnMin) { hoverBtnMin = hMin; redraw = true; }
 
+            bool hVer = rectBtnVersion.Contains(e.Location);
+            if (hVer != hoverBtnVersion) { hoverBtnVersion = hVer; redraw = true; }
+
             bool hBb = rectBtnBufferbloat.Contains(e.Location);
             if (hBb != hoverBtnBufferbloat) { hoverBtnBufferbloat = hBb; redraw = true; }
 
@@ -2874,6 +3044,8 @@ namespace RobloxNetworkTuner
 
             bool hExit = rectBtnExit.Contains(e.Location);
             if (hExit != hoverBtnExit) { hoverBtnExit = hExit; redraw = true; }
+
+            this.Cursor = (hClose || hMin || hVer || hBb || hTray || hExit) ? Cursors.Hand : Cursors.Default;
 
             if (redraw) this.Invalidate();
         }
@@ -2916,8 +3088,13 @@ namespace RobloxNetworkTuner
                 g.DrawString("ADAPTIVE LOW-LATENCY ENGINE", fSub, bSub, 69, 37);
             }
 
-            // Version Pill
-            DrawPill(g, 342, 16, 54, 20, "v2.2.0", Color.FromArgb(22, 35, 59), Color.FromArgb(0, 240, 255));
+            // Version Pill / Update Button
+            string verText = isUpdateAvailable ? "UPDATE" : ("v" + GitHubUpdateModule.CurrentVersion);
+            Color verBg = isUpdateAvailable
+                ? (hoverBtnVersion ? Color.FromArgb(40, 75, 45) : Color.FromArgb(20, 50, 30))
+                : (hoverBtnVersion ? Color.FromArgb(32, 50, 84) : Color.FromArgb(22, 35, 59));
+            Color verBorder = isUpdateAvailable ? Color.FromArgb(0, 255, 163) : Color.FromArgb(0, 240, 255);
+            DrawPill(g, rectBtnVersion.X, rectBtnVersion.Y, rectBtnVersion.Width, rectBtnVersion.Height, verText, verBg, verBorder);
 
             // Minimize & Close Buttons
             DrawWindowButton(g, rectBtnMin, "—", hoverBtnMin, Color.FromArgb(35, 45, 66), Color.White);
@@ -3243,6 +3420,98 @@ namespace RobloxNetworkTuner
             path.CloseFigure();
             return path;
         }
+
+        private void TriggerUpdateCheckGui(bool fromMenu)
+        {
+            if (isCheckingForUpdate) return;
+
+            if (isUpdateAvailable && latestRelease != null)
+            {
+                PromptAndApplyUpdate(latestRelease);
+                return;
+            }
+
+            isCheckingForUpdate = true;
+            bufferbloatStatus = "Checking for updates on GitHub...";
+            this.Invalidate();
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                GitHubUpdateModule.ReleaseInfo rel = GitHubUpdateModule.FetchLatestRelease();
+                try
+                {
+                    this.BeginInvoke((MethodInvoker)delegate
+                    {
+                        isCheckingForUpdate = false;
+                        if (rel != null && rel.ReleaseVersion != null)
+                        {
+                            Version curVer = GitHubUpdateModule.ParseVersionSafe(GitHubUpdateModule.CurrentVersion);
+                            if (rel.ReleaseVersion > curVer)
+                            {
+                                isUpdateAvailable = true;
+                                latestRelease = rel;
+                                this.Invalidate();
+                                PromptAndApplyUpdate(rel);
+                            }
+                            else
+                            {
+                                bufferbloatStatus = "You are running the latest version (v" + GitHubUpdateModule.CurrentVersion + ").";
+                                this.Invalidate();
+                                MessageBox.Show(this,
+                                    string.Format("Roblox Network Tuner is up to date!\n\nYou are running the latest version (v{0}).", GitHubUpdateModule.CurrentVersion),
+                                    "Up to Date - Roblox Network Tuner",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
+                            }
+                        }
+                        else
+                        {
+                            bufferbloatStatus = "Unable to connect to GitHub releases API.";
+                            this.Invalidate();
+                            MessageBox.Show(this,
+                                "Unable to check for updates.\n\nPlease verify your internet connection and try again.",
+                                "Update Check Failed",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                        }
+                    });
+                }
+                catch { }
+            });
+        }
+
+        private void PromptAndApplyUpdate(GitHubUpdateModule.ReleaseInfo rel)
+        {
+            string msg = string.Format(
+                "A new version of Roblox Network Tuner is available!\n\n" +
+                "Current Version: v{0}\n" +
+                "Latest Version:  {1}\n\n" +
+                "Would you like to download and install this update now?",
+                GitHubUpdateModule.CurrentVersion, rel.TagName);
+
+            DialogResult dr = MessageBox.Show(this, msg, "Update Available - Roblox Network Tuner", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (dr == DialogResult.Yes)
+            {
+                bufferbloatStatus = "Downloading update " + rel.TagName + "...";
+                this.Invalidate();
+
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    GitHubUpdateModule.PerformUpdateWithHandoff(rel, true, delegate(string status)
+                    {
+                        try
+                        {
+                            this.BeginInvoke((MethodInvoker)delegate
+                            {
+                                bufferbloatStatus = status;
+                                this.Invalidate();
+                            });
+                        }
+                        catch { }
+                    });
+                });
+            }
+        }
     }
 
     #endregion
@@ -3355,13 +3624,17 @@ namespace RobloxNetworkTuner
                 }
                 if (flag == "--check-update" || flag == "-check-update" || flag == "/checkupdate")
                 {
-                    GitHubUpdateModule.CheckForUpdate(false);
+                    GitHubUpdateModule.CheckForUpdateCli(false);
                     return;
                 }
                 if (flag == "--update" || flag == "-update" || flag == "/update")
                 {
-                    if (!EnsureAdministrator(args)) return;
-                    GitHubUpdateModule.CheckForUpdate(true);
+                    bool force = false;
+                    for (int i = 1; i < args.Length; i++)
+                    {
+                        if (args[i] == "--force" || args[i] == "-f" || args[i] == "/force") force = true;
+                    }
+                    GitHubUpdateModule.PerformUpdateCli(force);
                     return;
                 }
                 if (flag == "--console" || flag == "-c" || flag == "/console")
