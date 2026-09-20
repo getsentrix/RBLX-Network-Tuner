@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.2.0")]
-[assembly: AssemblyFileVersion("2.4.2.0")]
+[assembly: AssemblyVersion("2.4.3.0")]
+[assembly: AssemblyFileVersion("2.4.3.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2761,7 +2761,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.2";
+        public const string CurrentVersion = "2.4.3";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -4504,7 +4504,7 @@ try {
             using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
             {
-                string gTitle = isLiveGameServer ? "LIVE GAME SERVER PACKET PACING (REAL-TIME RTT WAVEFORM)" : "PING;
+                string gTitle = isLiveGameServer ? "LIVE GAME SERVER PACKET PACING (REAL-TIME RTT WAVEFORM)" : "PING";
                 g.DrawString(gTitle, fCardHead, bCardHead, 232, 172);
             }
 
