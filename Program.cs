@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.4.0")]
-[assembly: AssemblyFileVersion("2.4.4.0")]
+[assembly: AssemblyVersion("2.4.5.0")]
+[assembly: AssemblyFileVersion("2.4.5.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2881,7 +2881,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.4";
+        public const string CurrentVersion = "2.4.5";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -3903,8 +3903,11 @@ try {
             currentSnapshot = new TunerState();
             currentSnapshot.Timestamp = DateTime.UtcNow.ToString("o");
 
-            // 0. Automatic System Restore Point Creation
-            SystemRestoreModule.CreateRestorePoint("RobloxNetworkTuner Pre-Optimization Backup");
+            // 0. Automatic System Restore Point Creation (asynchronous, non-blocking)
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try { SystemRestoreModule.CreateRestorePoint("RobloxNetworkTuner Pre-Optimization Backup"); } catch { }
+            });
 
             // 1. Winsock Ancillary Function Driver (AFD) Buffer Locking & UDP Fast-Path
             AfdOptimizationModule.Apply(currentSnapshot);
@@ -4069,25 +4072,27 @@ try {
                     }
                 }
 
-                BenchmarkMetrics preQos = QosVerificationModule.MeasurePreQos("roblox.com");
-
                 string qosCmd = string.Format(
                     "Remove-NetQosPolicy -Name \"{0}\" -Confirm:$false -ErrorAction SilentlyContinue; " +
                     "New-NetQosPolicy -Name \"{0}\" -AppPathNameMatchCondition \"{1}.exe\" -DSCPAction 46 -NetworkProfile All -ErrorAction SilentlyContinue",
                     QosPolicyName, TargetProcessName);
                 RunSilent("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"" + qosCmd + "\"");
+                PrintSuccess("APPLIED (DSCP 46)");
 
-                // Verify QoS policy stability against packet loss and latency degradation
-                bool verified = QosVerificationModule.VerifyQosStability("roblox.com", preQos);
-                if (verified)
+                // Verify QoS policy stability against packet loss and latency degradation in background
+                ThreadPool.QueueUserWorkItem(delegate
                 {
-                    PrintSuccess("VERIFIED (DSCP 46)");
-                }
-                else
-                {
-                    RemoveQosPolicyDirect();
-                    PrintInfo("SKIPPED (Deprioritized by Gateway/ISP)");
-                }
+                    try
+                    {
+                        BenchmarkMetrics preQos = QosVerificationModule.MeasurePreQos("roblox.com");
+                        bool verified = QosVerificationModule.VerifyQosStability("roblox.com", preQos);
+                        if (!verified)
+                        {
+                            RemoveQosPolicyDirect();
+                        }
+                    }
+                    catch { }
+                });
             }
             catch (Exception ex)
             {

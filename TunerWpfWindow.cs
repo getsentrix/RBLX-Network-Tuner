@@ -19,6 +19,257 @@ namespace RobloxNetworkTuner
 {
     #region Custom Hardware-Accelerated WPF Controls
 
+    /// <summary>
+    /// Fully custom hardware-accelerated button that completely bypasses Windows Aero theme.
+    /// Provides smooth 120ms hover animations, tactile click scaling, and customizable borders.
+    /// </summary>
+    public class ModernButton : UserControl
+    {
+        private readonly Border rootBorder;
+        private readonly TextBlock textBlock;
+        private readonly ScaleTransform scaleTransform;
+
+        private Color normalBg;
+        private Color hoverBg;
+        private Color normalBorder;
+        private Color hoverBorder;
+        private Color normalFg;
+        private Color hoverFg;
+
+        private bool isGradient = false;
+        private LinearGradientBrush normalGrad;
+        private LinearGradientBrush hoverGrad;
+
+        public event RoutedEventHandler Click;
+
+        public string Text
+        {
+            get { return textBlock != null ? textBlock.Text : ""; }
+            set { if (textBlock != null) textBlock.Text = value; }
+        }
+
+        public ModernButton()
+        {
+            this.Cursor = Cursors.Hand;
+            this.Focusable = false;
+
+            scaleTransform = new ScaleTransform(1.0, 1.0);
+            this.RenderTransform = scaleTransform;
+            this.RenderTransformOrigin = new Point(0.5, 0.5);
+
+            rootBorder = new Border();
+            textBlock = new TextBlock
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center
+            };
+
+            rootBorder.Child = textBlock;
+            this.Content = rootBorder;
+
+            this.MouseEnter += ModernButton_MouseEnter;
+            this.MouseLeave += ModernButton_MouseLeave;
+            this.PreviewMouseLeftButtonDown += ModernButton_PreviewMouseDown;
+            this.PreviewMouseLeftButtonUp += ModernButton_PreviewMouseUp;
+        }
+
+        private void ModernButton_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (isGradient)
+            {
+                rootBorder.Background = hoverGrad;
+                if (rootBorder.BorderBrush is SolidColorBrush)
+                {
+                    ColorAnimation borderAnim = new ColorAnimation(hoverBorder, new Duration(TimeSpan.FromMilliseconds(120)));
+                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
+                }
+            }
+            else
+            {
+                if (rootBorder.Background is SolidColorBrush)
+                {
+                    ColorAnimation bgAnim = new ColorAnimation(hoverBg, new Duration(TimeSpan.FromMilliseconds(120)));
+                    rootBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, bgAnim);
+                }
+                if (rootBorder.BorderBrush is SolidColorBrush)
+                {
+                    ColorAnimation borderAnim = new ColorAnimation(hoverBorder, new Duration(TimeSpan.FromMilliseconds(120)));
+                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
+                }
+                if (textBlock.Foreground is SolidColorBrush)
+                {
+                    ColorAnimation fgAnim = new ColorAnimation(hoverFg, new Duration(TimeSpan.FromMilliseconds(120)));
+                    textBlock.Foreground.BeginAnimation(SolidColorBrush.ColorProperty, fgAnim);
+                }
+            }
+        }
+
+        private void ModernButton_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (isGradient)
+            {
+                rootBorder.Background = normalGrad;
+                if (rootBorder.BorderBrush is SolidColorBrush)
+                {
+                    ColorAnimation borderAnim = new ColorAnimation(normalBorder, new Duration(TimeSpan.FromMilliseconds(120)));
+                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
+                }
+            }
+            else
+            {
+                if (rootBorder.Background is SolidColorBrush)
+                {
+                    ColorAnimation bgAnim = new ColorAnimation(normalBg, new Duration(TimeSpan.FromMilliseconds(120)));
+                    rootBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, bgAnim);
+                }
+                if (rootBorder.BorderBrush is SolidColorBrush)
+                {
+                    ColorAnimation borderAnim = new ColorAnimation(normalBorder, new Duration(TimeSpan.FromMilliseconds(120)));
+                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
+                }
+                if (textBlock.Foreground is SolidColorBrush)
+                {
+                    ColorAnimation fgAnim = new ColorAnimation(normalFg, new Duration(TimeSpan.FromMilliseconds(120)));
+                    textBlock.Foreground.BeginAnimation(SolidColorBrush.ColorProperty, fgAnim);
+                }
+            }
+        }
+
+        private void ModernButton_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            DoubleAnimation press = new DoubleAnimation(0.96, new Duration(TimeSpan.FromMilliseconds(50)));
+            scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, press);
+            scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, press);
+        }
+
+        private void ModernButton_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            DoubleAnimation release = new DoubleAnimation(1.0, new Duration(TimeSpan.FromMilliseconds(80)));
+            scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, release);
+            scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, release);
+
+            if (this.IsMouseOver && Click != null)
+            {
+                Click(this, new RoutedEventArgs());
+            }
+        }
+
+        public static ModernButton CreateHero(string text, double width = 148, double height = 46)
+        {
+            ModernButton btn = new ModernButton();
+            btn.Width = width;
+            btn.Height = height;
+            btn.isGradient = true;
+
+            btn.normalGrad = new LinearGradientBrush(Color.FromRgb(16, 185, 129), Color.FromRgb(5, 150, 105), new Point(0, 0), new Point(1, 1));
+            btn.hoverGrad = new LinearGradientBrush(Color.FromRgb(52, 211, 153), Color.FromRgb(16, 185, 129), new Point(0, 0), new Point(1, 1));
+
+            btn.normalBorder = Color.FromRgb(52, 211, 153);
+            btn.hoverBorder = Color.FromRgb(110, 231, 183);
+
+            btn.rootBorder.CornerRadius = new CornerRadius(8);
+            btn.rootBorder.Background = btn.normalGrad;
+            btn.rootBorder.BorderBrush = new SolidColorBrush(btn.normalBorder);
+            btn.rootBorder.BorderThickness = new Thickness(1);
+
+            btn.textBlock.Text = text;
+            btn.textBlock.FontSize = 12.5;
+            btn.textBlock.FontWeight = FontWeights.Bold;
+            btn.textBlock.Foreground = Brushes.White;
+
+            return btn;
+        }
+
+        public static ModernButton CreateAction(string text, Color accent, double height = 36)
+        {
+            ModernButton btn = new ModernButton();
+            btn.Height = height;
+
+            btn.normalBg = Color.FromArgb(22, accent.R, accent.G, accent.B);
+            btn.hoverBg = Color.FromArgb(48, accent.R, accent.G, accent.B);
+            btn.normalBorder = Color.FromArgb(110, accent.R, accent.G, accent.B);
+            btn.hoverBorder = accent;
+            btn.normalFg = accent;
+            btn.hoverFg = Colors.White;
+
+            btn.rootBorder.CornerRadius = new CornerRadius(7);
+            btn.rootBorder.Padding = new Thickness(16, 0, 16, 0);
+            btn.rootBorder.Background = new SolidColorBrush(btn.normalBg);
+            btn.rootBorder.BorderBrush = new SolidColorBrush(btn.normalBorder);
+            btn.rootBorder.BorderThickness = new Thickness(1);
+
+            btn.textBlock.Text = text;
+            btn.textBlock.FontSize = 11.5;
+            btn.textBlock.FontWeight = FontWeights.Bold;
+            btn.textBlock.Foreground = new SolidColorBrush(btn.normalFg);
+
+            return btn;
+        }
+
+        public static ModernButton CreateCaption(string text, bool isClose)
+        {
+            ModernButton btn = new ModernButton();
+            btn.Width = 32;
+            btn.Height = 28;
+
+            btn.normalBg = Colors.Transparent;
+            btn.normalBorder = Colors.Transparent;
+            btn.normalFg = Color.FromRgb(148, 163, 184);
+
+            if (isClose)
+            {
+                btn.hoverBg = Color.FromRgb(225, 29, 72); // Rose/Red
+                btn.hoverBorder = Color.FromRgb(244, 63, 94);
+                btn.hoverFg = Colors.White;
+            }
+            else
+            {
+                btn.hoverBg = Color.FromRgb(30, 41, 59); // Slate
+                btn.hoverBorder = Color.FromRgb(51, 65, 85);
+                btn.hoverFg = Colors.White;
+            }
+
+            btn.rootBorder.CornerRadius = new CornerRadius(6);
+            btn.rootBorder.Background = new SolidColorBrush(btn.normalBg);
+            btn.rootBorder.BorderBrush = new SolidColorBrush(btn.normalBorder);
+            btn.rootBorder.BorderThickness = new Thickness(1);
+
+            btn.textBlock.Text = text;
+            btn.textBlock.FontSize = 11.5;
+            btn.textBlock.FontWeight = FontWeights.SemiBold;
+            btn.textBlock.Foreground = new SolidColorBrush(btn.normalFg);
+
+            return btn;
+        }
+
+        public static ModernButton CreatePill(string text)
+        {
+            ModernButton btn = new ModernButton();
+            btn.Height = 24;
+
+            btn.normalBg = Color.FromRgb(14, 22, 34);
+            btn.hoverBg = Color.FromRgb(20, 32, 48);
+            btn.normalBorder = Color.FromRgb(16, 185, 129);
+            btn.hoverBorder = Color.FromRgb(52, 211, 153);
+            btn.normalFg = Color.FromRgb(52, 211, 153);
+            btn.hoverFg = Colors.White;
+
+            btn.rootBorder.CornerRadius = new CornerRadius(12);
+            btn.rootBorder.Padding = new Thickness(12, 0, 12, 0);
+            btn.rootBorder.Background = new SolidColorBrush(btn.normalBg);
+            btn.rootBorder.BorderBrush = new SolidColorBrush(btn.normalBorder);
+            btn.rootBorder.BorderThickness = new Thickness(1);
+
+            btn.textBlock.Text = text;
+            btn.textBlock.FontSize = 10;
+            btn.textBlock.FontWeight = FontWeights.Bold;
+            btn.textBlock.Foreground = new SolidColorBrush(btn.normalFg);
+
+            return btn;
+        }
+    }
+
     public class AnimatedToggleSwitch : UserControl
     {
         private Border track;
@@ -45,24 +296,25 @@ namespace RobloxNetworkTuner
         public AnimatedToggleSwitch(bool initial)
         {
             isChecked = initial;
-            this.Width = 42;
-            this.Height = 22;
+            this.Width = 44;
+            this.Height = 24;
             this.Cursor = Cursors.Hand;
+            this.Focusable = false;
 
             track = new Border();
-            track.CornerRadius = new CornerRadius(11);
+            track.CornerRadius = new CornerRadius(12);
             track.Background = new SolidColorBrush(isChecked ? Color.FromRgb(16, 185, 129) : Color.FromRgb(30, 41, 59));
             track.BorderBrush = new SolidColorBrush(isChecked ? Color.FromRgb(52, 211, 153) : Color.FromRgb(51, 65, 85));
-            track.BorderThickness = new Thickness(1);
+            track.BorderThickness = new Thickness(1.2);
 
             Grid grid = new Grid();
             thumb = new Ellipse();
-            thumb.Width = 14;
-            thumb.Height = 14;
+            thumb.Width = 16;
+            thumb.Height = 16;
             thumb.Fill = Brushes.White;
             thumb.HorizontalAlignment = HorizontalAlignment.Left;
             thumb.VerticalAlignment = VerticalAlignment.Center;
-            thumb.Margin = new Thickness(4, 0, 0, 0);
+            thumb.Margin = new Thickness(3.5, 0, 0, 0);
 
             thumbTransform = new TranslateTransform(isChecked ? 20 : 0, 0);
             thumb.RenderTransform = thumbTransform;
@@ -75,6 +327,20 @@ namespace RobloxNetworkTuner
             {
                 IsChecked = !IsChecked;
             };
+
+            this.MouseEnter += delegate
+            {
+                Color hBorder = isChecked ? Color.FromRgb(110, 231, 183) : Color.FromRgb(71, 85, 105);
+                ColorAnimation cAnim = new ColorAnimation(hBorder, new Duration(TimeSpan.FromMilliseconds(120)));
+                track.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, cAnim);
+            };
+
+            this.MouseLeave += delegate
+            {
+                Color nBorder = isChecked ? Color.FromRgb(52, 211, 153) : Color.FromRgb(51, 65, 85);
+                ColorAnimation cAnim = new ColorAnimation(nBorder, new Duration(TimeSpan.FromMilliseconds(120)));
+                track.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, cAnim);
+            };
         }
 
         private void AnimateState()
@@ -85,9 +351,14 @@ namespace RobloxNetworkTuner
             slide.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
             thumbTransform.BeginAnimation(TranslateTransform.XProperty, slide);
 
-            Color toColor = isChecked ? Color.FromRgb(16, 185, 129) : Color.FromRgb(30, 41, 59);
-            ColorAnimation colorAnim = new ColorAnimation(toColor, new Duration(TimeSpan.FromMilliseconds(150)));
-            track.Background.BeginAnimation(SolidColorBrush.ColorProperty, colorAnim);
+            Color toBg = isChecked ? Color.FromRgb(16, 185, 129) : Color.FromRgb(30, 41, 59);
+            Color toBorder = isChecked ? Color.FromRgb(52, 211, 153) : Color.FromRgb(51, 65, 85);
+
+            ColorAnimation bgAnim = new ColorAnimation(toBg, new Duration(TimeSpan.FromMilliseconds(150)));
+            ColorAnimation borderAnim = new ColorAnimation(toBorder, new Duration(TimeSpan.FromMilliseconds(150)));
+
+            track.Background.BeginAnimation(SolidColorBrush.ColorProperty, bgAnim);
+            track.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
         }
     }
 
@@ -95,7 +366,12 @@ namespace RobloxNetworkTuner
     {
         private Polyline polyline;
         private Polygon areaPolygon;
+        private Line baseline;
         private Color lineColor;
+
+        private double[] lastValues;
+        private double lastMin = 0;
+        private double lastMax = 100;
 
         public SparklineVectorCanvas(Color color)
         {
@@ -106,7 +382,7 @@ namespace RobloxNetworkTuner
             LinearGradientBrush areaBrush = new LinearGradientBrush();
             areaBrush.StartPoint = new Point(0, 0);
             areaBrush.EndPoint = new Point(0, 1);
-            areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(50, color.R, color.G, color.B), 0.0));
+            areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(45, color.R, color.G, color.B), 0.0));
             areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1.0));
             areaPolygon.Fill = areaBrush;
 
@@ -115,11 +391,32 @@ namespace RobloxNetworkTuner
             polyline.StrokeThickness = 1.6;
             polyline.StrokeLineJoin = PenLineJoin.Round;
 
+            baseline = new Line();
+            baseline.Stroke = new SolidColorBrush(Color.FromArgb(35, 255, 255, 255));
+            baseline.StrokeThickness = 0.8;
+
+            this.Children.Add(baseline);
             this.Children.Add(areaPolygon);
             this.Children.Add(polyline);
+
+            this.SizeChanged += delegate
+            {
+                if (lastValues != null)
+                {
+                    RenderPoints(lastValues, lastMin, lastMax);
+                }
+            };
         }
 
         public void UpdatePoints(double[] values, double minVal, double maxVal)
+        {
+            lastValues = values;
+            lastMin = minVal;
+            lastMax = maxVal;
+            RenderPoints(values, minVal, maxVal);
+        }
+
+        private void RenderPoints(double[] values, double minVal, double maxVal)
         {
             if (values == null || values.Length < 2 || this.ActualWidth <= 0 || this.ActualHeight <= 0) return;
 
@@ -132,6 +429,11 @@ namespace RobloxNetworkTuner
             double step = this.ActualWidth / (double)(values.Length - 1);
             double h = this.ActualHeight;
 
+            baseline.X1 = 0;
+            baseline.Y1 = h - 1;
+            baseline.X2 = this.ActualWidth;
+            baseline.Y2 = h - 1;
+
             areaPts.Add(new Point(0, h));
 
             for (int i = 0; i < values.Length; i++)
@@ -140,7 +442,7 @@ namespace RobloxNetworkTuner
                 if (norm < 0) norm = 0;
                 if (norm > 1) norm = 1;
                 double x = i * step;
-                double y = h - (norm * (h - 6.0)) - 3.0;
+                double y = h - (norm * (h - 8.0)) - 4.0;
 
                 Point pt = new Point(x, y);
                 pts.Add(pt);
@@ -175,6 +477,8 @@ namespace RobloxNetworkTuner
         private TranslateTransform indicatorTransform;
         private TextBlock headerBreadcrumbText;
         private Border contentContainer;
+        private readonly List<Border> sidebarButtons = new List<Border>();
+        private readonly List<TextBlock> sidebarLabels = new List<TextBlock>();
 
         // Views
         private Grid overviewView;
@@ -194,9 +498,8 @@ namespace RobloxNetworkTuner
         private TextBlock txtOptTitle;
         private TextBlock txtOptSub;
         private TextBlock txtRobloxStatus;
-        private Button btnTuneNow;
-        private TextBlock btnTuneNowText;
-        private TextBlock txtHeaderVer;
+        private ModernButton btnTuneNow;
+        private ModernButton verPillBtn;
 
         // Real-Time Controls
         private AnimatedToggleSwitch switchPerfMode;
@@ -227,11 +530,11 @@ namespace RobloxNetworkTuner
         private TextBlock txtStatLossVal;
         private SparklineVectorCanvas sparkBigWaveform;
         private TextBlock txtStatBufferbloat;
-        private Button btnRunBufferbloat;
+        private ModernButton btnRunBufferbloat;
 
         // Settings Tab Controls
         private TextBlock txtUpdateInfo;
-        private Button btnCheckUpdate;
+        private ModernButton btnCheckUpdate;
 
         // Timers & Background Monitors
         private readonly DispatcherTimer watchdogTimer;
@@ -264,8 +567,8 @@ namespace RobloxNetworkTuner
         public TunerWpfWindow()
         {
             this.Title = "Roblox Network Tuner";
-            this.Width = 880;
-            this.Height = 540;
+            this.Width = 900;
+            this.Height = 560;
             this.WindowStyle = WindowStyle.None;
             this.AllowsTransparency = true;
             this.Background = Brushes.Transparent;
@@ -290,7 +593,7 @@ namespace RobloxNetworkTuner
             SetupSystemTray();
 
             // Smooth Window Fade-In
-            DoubleAnimation fadeIn = new DoubleAnimation(0.0, 1.0, new Duration(TimeSpan.FromMilliseconds(220)));
+            DoubleAnimation fadeIn = new DoubleAnimation(0.0, 1.0, new Duration(TimeSpan.FromMilliseconds(200)));
             this.BeginAnimation(Window.OpacityProperty, fadeIn);
 
             // Initial async checks
@@ -313,19 +616,19 @@ namespace RobloxNetworkTuner
             // Outer Window Shell
             Border rootBorder = new Border();
             rootBorder.CornerRadius = new CornerRadius(12);
-            rootBorder.Background = new SolidColorBrush(Color.FromRgb(10, 13, 20)); // #0A0D14
-            rootBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Emerald accent
-            rootBorder.BorderThickness = new Thickness(1);
+            rootBorder.Background = new SolidColorBrush(Color.FromRgb(10, 13, 20)); // Deep obsidian
+            rootBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59)); // Clean refined slate
+            rootBorder.BorderThickness = new Thickness(1.2);
             rootBorder.Effect = new DropShadowEffect
             {
                 Color = Colors.Black,
-                BlurRadius = 24,
+                BlurRadius = 28,
                 ShadowDepth = 6,
-                Opacity = 0.6
+                Opacity = 0.65
             };
 
             Grid rootGrid = new Grid();
-            rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+            rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(210) });
             rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             // 1. Sidebar
@@ -334,14 +637,14 @@ namespace RobloxNetworkTuner
             // 2. Main Body (Header + Content Area)
             Grid mainArea = new Grid();
             Grid.SetColumn(mainArea, 1);
-            mainArea.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) });
+            mainArea.RowDefinitions.Add(new RowDefinition { Height = new GridLength(52) });
             mainArea.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
             mainArea.Children.Add(BuildHeader());
 
             contentContainer = new Border();
             Grid.SetRow(contentContainer, 1);
-            contentContainer.Padding = new Thickness(16, 12, 16, 16);
+            contentContainer.Padding = new Thickness(20, 14, 20, 18);
 
             // Initialize 4 Views
             overviewView = BuildOverviewView();
@@ -367,23 +670,23 @@ namespace RobloxNetworkTuner
             sideBorder.BorderThickness = new Thickness(0, 0, 1, 0);
 
             Grid sideGrid = new Grid();
-            sideGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(70) });
+            sideGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(76) });
             sideGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            sideGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) });
+            sideGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(64) });
 
             // Brand Header
             StackPanel brandStack = new StackPanel();
             brandStack.Orientation = Orientation.Horizontal;
             brandStack.VerticalAlignment = VerticalAlignment.Center;
-            brandStack.Margin = new Thickness(16, 0, 0, 0);
+            brandStack.Margin = new Thickness(20, 0, 0, 0);
 
             Border avatar = new Border();
-            avatar.Width = 36;
-            avatar.Height = 36;
-            avatar.CornerRadius = new CornerRadius(8);
+            avatar.Width = 38;
+            avatar.Height = 38;
+            avatar.CornerRadius = new CornerRadius(9);
             avatar.Background = new SolidColorBrush(Color.FromRgb(10, 30, 36));
             avatar.BorderBrush = new SolidColorBrush(Color.FromRgb(6, 182, 212));
-            avatar.BorderThickness = new Thickness(1);
+            avatar.BorderThickness = new Thickness(1.2);
 
             TextBlock txtAv = new TextBlock();
             txtAv.Text = "GS";
@@ -396,20 +699,20 @@ namespace RobloxNetworkTuner
             brandStack.Children.Add(avatar);
 
             StackPanel titleStack = new StackPanel();
-            titleStack.Margin = new Thickness(10, 0, 0, 0);
+            titleStack.Margin = new Thickness(12, 0, 0, 0);
             titleStack.VerticalAlignment = VerticalAlignment.Center;
 
             TextBlock txtName = new TextBlock();
             txtName.Text = "getsentrix";
             txtName.FontWeight = FontWeights.Bold;
-            txtName.FontSize = 13;
+            txtName.FontSize = 13.5;
             txtName.Foreground = new SolidColorBrush(Color.FromRgb(248, 250, 252));
             titleStack.Children.Add(txtName);
 
             TextBlock txtVer = new TextBlock();
             txtVer.Text = "RBLX Tuner v" + GitHubUpdateModule.CurrentVersion;
             txtVer.FontWeight = FontWeights.SemiBold;
-            txtVer.FontSize = 10;
+            txtVer.FontSize = 10.5;
             txtVer.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129));
             titleStack.Children.Add(txtVer);
 
@@ -419,17 +722,17 @@ namespace RobloxNetworkTuner
             // Nav Tabs Stack
             Grid navGrid = new Grid();
             Grid.SetRow(navGrid, 1);
-            navGrid.Margin = new Thickness(10, 10, 10, 0);
+            navGrid.Margin = new Thickness(12, 14, 12, 0);
 
             // Left Animated Indicator Bar
             sidebarTabIndicator = new Border();
-            sidebarTabIndicator.Width = 3;
+            sidebarTabIndicator.Width = 3.5;
             sidebarTabIndicator.Height = 24;
-            sidebarTabIndicator.CornerRadius = new CornerRadius(1.5);
+            sidebarTabIndicator.CornerRadius = new CornerRadius(1.75);
             sidebarTabIndicator.Background = new SolidColorBrush(Color.FromRgb(16, 185, 129));
             sidebarTabIndicator.HorizontalAlignment = HorizontalAlignment.Left;
             sidebarTabIndicator.VerticalAlignment = VerticalAlignment.Top;
-            sidebarTabIndicator.Margin = new Thickness(2, 8, 0, 0);
+            sidebarTabIndicator.Margin = new Thickness(2, 9, 0, 0);
 
             indicatorTransform = new TranslateTransform(0, 0);
             sidebarTabIndicator.RenderTransform = indicatorTransform;
@@ -447,7 +750,7 @@ namespace RobloxNetworkTuner
             // Sidebar Footer
             StackPanel footStack = new StackPanel();
             Grid.SetRow(footStack, 2);
-            footStack.Margin = new Thickness(16, 0, 0, 12);
+            footStack.Margin = new Thickness(20, 0, 0, 14);
             footStack.VerticalAlignment = VerticalAlignment.Bottom;
 
             StackPanel statDotStack = new StackPanel { Orientation = Orientation.Horizontal };
@@ -458,7 +761,7 @@ namespace RobloxNetworkTuner
                 FontSize = 9.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129)),
-                Margin = new Thickness(6, 0, 0, 0)
+                Margin = new Thickness(7, 0, 0, 0)
             };
             statDotStack.Children.Add(dot);
             statDotStack.Children.Add(txtStat);
@@ -472,6 +775,8 @@ namespace RobloxNetworkTuner
                 Margin = new Thickness(0, 4, 0, 0),
                 Cursor = Cursors.Hand
             };
+            txtGh.MouseEnter += delegate { txtGh.Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)); };
+            txtGh.MouseLeave += delegate { txtGh.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)); };
             txtGh.MouseLeftButtonUp += delegate
             {
                 try { Process.Start("https://github.com/getsentrix/RBLX-Network-Tuner"); } catch { }
@@ -486,10 +791,10 @@ namespace RobloxNetworkTuner
         private Border CreateSidebarButton(string title, NavTab tab)
         {
             Border btn = new Border();
-            btn.Height = 40;
-            btn.CornerRadius = new CornerRadius(6);
-            btn.Margin = new Thickness(0, 2, 0, 2);
-            btn.Background = Brushes.Transparent;
+            btn.Height = 42;
+            btn.CornerRadius = new CornerRadius(8);
+            btn.Margin = new Thickness(0, 3, 0, 3);
+            btn.Background = (tab == currentTab) ? new SolidColorBrush(Color.FromRgb(19, 27, 42)) : Brushes.Transparent;
             btn.Cursor = Cursors.Hand;
 
             TextBlock tb = new TextBlock();
@@ -497,19 +802,28 @@ namespace RobloxNetworkTuner
             tb.FontSize = 12.5;
             tb.FontWeight = (tab == currentTab) ? FontWeights.Bold : FontWeights.Normal;
             tb.Foreground = new SolidColorBrush((tab == currentTab) ? Colors.White : Color.FromRgb(148, 163, 184));
-            tb.Margin = new Thickness(18, 0, 0, 0);
+            tb.Margin = new Thickness(20, 0, 0, 0);
             tb.VerticalAlignment = VerticalAlignment.Center;
             btn.Child = tb;
+
+            sidebarButtons.Add(btn);
+            sidebarLabels.Add(tb);
 
             btn.MouseEnter += delegate
             {
                 if (currentTab != tab)
-                    btn.Background = new SolidColorBrush(Color.FromRgb(18, 24, 35));
+                {
+                    ColorAnimation ca = new ColorAnimation(Color.FromRgb(17, 24, 39), new Duration(TimeSpan.FromMilliseconds(120)));
+                    btn.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+                }
             };
             btn.MouseLeave += delegate
             {
                 if (currentTab != tab)
-                    btn.Background = Brushes.Transparent;
+                {
+                    ColorAnimation ca = new ColorAnimation(Colors.Transparent, new Duration(TimeSpan.FromMilliseconds(120)));
+                    btn.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+                }
             };
 
             btn.MouseLeftButtonUp += delegate
@@ -537,12 +851,12 @@ namespace RobloxNetworkTuner
             };
 
             Grid hGrid = new Grid();
-            hGrid.Margin = new Thickness(16, 0, 12, 0);
+            hGrid.Margin = new Thickness(20, 0, 16, 0);
 
             // Left Breadcrumb
             headerBreadcrumbText = new TextBlock();
             headerBreadcrumbText.Text = "OVERVIEW  /  DASHBOARD";
-            headerBreadcrumbText.FontSize = 10.5;
+            headerBreadcrumbText.FontSize = 11;
             headerBreadcrumbText.FontWeight = FontWeights.Bold;
             headerBreadcrumbText.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
             headerBreadcrumbText.VerticalAlignment = VerticalAlignment.Center;
@@ -555,56 +869,28 @@ namespace RobloxNetworkTuner
             rightActions.VerticalAlignment = VerticalAlignment.Center;
 
             // Version Pill Button
-            Border verPill = new Border();
-            verPill.CornerRadius = new CornerRadius(10);
-            verPill.Background = new SolidColorBrush(Color.FromRgb(18, 24, 36));
-            verPill.BorderBrush = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-            verPill.BorderThickness = new Thickness(1);
-            verPill.Padding = new Thickness(10, 3, 10, 3);
-            verPill.Margin = new Thickness(0, 0, 12, 0);
-            verPill.Cursor = Cursors.Hand;
-            TextBlock txtVer = new TextBlock
-            {
-                Text = "v" + GitHubUpdateModule.CurrentVersion,
-                FontSize = 10,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153))
-            };
-            txtHeaderVer = txtVer;
-            verPill.Child = txtVer;
-            verPill.MouseLeftButtonUp += delegate
+            verPillBtn = ModernButton.CreatePill("v" + GitHubUpdateModule.CurrentVersion);
+            verPillBtn.Margin = new Thickness(0, 0, 14, 0);
+            verPillBtn.Click += delegate
             {
                 SwitchTab(NavTab.Settings);
             };
-            rightActions.Children.Add(verPill);
+            rightActions.Children.Add(verPillBtn);
 
             // Minimize Button
-            Button btnMin = CreateCaptionButton("—", delegate { this.WindowState = WindowState.Minimized; });
+            ModernButton btnMin = ModernButton.CreateCaption("—", false);
+            btnMin.Click += delegate { this.WindowState = WindowState.Minimized; };
             rightActions.Children.Add(btnMin);
 
             // Close Button
-            Button btnClose = CreateCaptionButton("✕", delegate { SafeExit(); });
+            ModernButton btnClose = ModernButton.CreateCaption("✕", true);
+            btnClose.Margin = new Thickness(4, 0, 0, 0);
+            btnClose.Click += delegate { SafeExit(); };
             rightActions.Children.Add(btnClose);
 
             hGrid.Children.Add(rightActions);
             hBorder.Child = hGrid;
             return hBorder;
-        }
-
-        private Button CreateCaptionButton(string text, RoutedEventHandler onClick)
-        {
-            Button btn = new Button();
-            btn.Content = text;
-            btn.Width = 30;
-            btn.Height = 26;
-            btn.Margin = new Thickness(2, 0, 2, 0);
-            btn.Background = Brushes.Transparent;
-            btn.BorderBrush = Brushes.Transparent;
-            btn.Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184));
-            btn.FontSize = 11;
-            btn.Cursor = Cursors.Hand;
-            btn.Click += onClick;
-            return btn;
         }
 
         #endregion
@@ -614,27 +900,27 @@ namespace RobloxNetworkTuner
         private Grid BuildOverviewView()
         {
             Grid grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(104) }); // 3 Sparkline Metric Cards
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(136) }); // Status & TUNE NOW Card
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(112) }); // 3 Sparkline Metric Cards
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(124) }); // Status & TUNE NOW Card
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Profiles & Controls
 
             // Row 0: 3 Cards
             Grid topCards = new Grid();
             topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
             topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
             topCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            txtPingVal = new TextBlock { Text = "24.2 ms", FontSize = 20, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)) };
+            txtPingVal = new TextBlock { Text = "24.2 ms", FontSize = 21, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)) };
             sparkPing = new SparklineVectorCanvas(Color.FromRgb(52, 211, 153));
             topCards.Children.Add(CreateMetricCard("PING", txtPingVal, sparkPing, 0));
 
-            txtLossVal = new TextBlock { Text = "0.0%", FontSize = 20, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
+            txtLossVal = new TextBlock { Text = "0.0%", FontSize = 21, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
             sparkLoss = new SparklineVectorCanvas(Color.FromRgb(56, 189, 248));
             topCards.Children.Add(CreateMetricCard("PACKET LOSS", txtLossVal, sparkLoss, 2));
 
-            txtJitterVal = new TextBlock { Text = "±0.45 ms", FontSize = 20, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(245, 158, 11)) };
+            txtJitterVal = new TextBlock { Text = "±0.45 ms", FontSize = 21, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(245, 158, 11)) };
             sparkJitter = new SparklineVectorCanvas(Color.FromRgb(245, 158, 11));
             topCards.Children.Add(CreateMetricCard("JITTER", txtJitterVal, sparkJitter, 4));
 
@@ -643,29 +929,29 @@ namespace RobloxNetworkTuner
             // Row 1: Optimization Status Card
             Border statusCard = new Border();
             Grid.SetRow(statusCard, 1);
-            statusCard.Margin = new Thickness(0, 10, 0, 10);
-            statusCard.CornerRadius = new CornerRadius(8);
-            statusCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            statusCard.Margin = new Thickness(0, 12, 0, 12);
+            statusCard.CornerRadius = new CornerRadius(10);
+            statusCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             statusCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             statusCard.BorderThickness = new Thickness(1);
 
             Grid statusGrid = new Grid();
-            statusGrid.Margin = new Thickness(16, 14, 16, 14);
-            statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
+            statusGrid.Margin = new Thickness(18, 16, 18, 16);
+            statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
             statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+            statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(164) });
 
             // Check Circle
             Border circle = new Border();
-            circle.Width = 44;
-            circle.Height = 44;
-            circle.CornerRadius = new CornerRadius(22);
+            circle.Width = 46;
+            circle.Height = 46;
+            circle.CornerRadius = new CornerRadius(23);
             circle.Background = new SolidColorBrush(Color.FromRgb(6, 40, 28));
             circle.BorderBrush = new SolidColorBrush(Color.FromRgb(16, 185, 129));
             circle.BorderThickness = new Thickness(1.5);
             circle.HorizontalAlignment = HorizontalAlignment.Left;
             circle.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock chk = new TextBlock { Text = "✓", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock chk = new TextBlock { Text = "✓", FontSize = 19, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             circle.Child = chk;
             statusGrid.Children.Add(circle);
 
@@ -674,37 +960,22 @@ namespace RobloxNetworkTuner
             Grid.SetColumn(statTxtStack, 1);
             statTxtStack.VerticalAlignment = VerticalAlignment.Center;
 
-            txtOptTitle = new TextBlock { Text = "Optimized Successfully", FontSize = 14, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
+            txtOptTitle = new TextBlock { Text = "Optimized Successfully", FontSize = 15, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
             statTxtStack.Children.Add(txtOptTitle);
 
-            txtOptSub = new TextBlock { Text = "0.50ms timer • NDIS fast-path • EcoQoS disabled", FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 2, 0, 3) };
+            txtOptSub = new TextBlock { Text = "0.50ms timer • NDIS fast-path • EcoQoS disabled", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 2, 0, 3) };
             statTxtStack.Children.Add(txtOptSub);
 
-            txtRobloxStatus = new TextBlock { Text = "Standby: Monitoring Roblox client...", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
+            txtRobloxStatus = new TextBlock { Text = "Standby: Monitoring Roblox client...", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
             statTxtStack.Children.Add(txtRobloxStatus);
 
             statusGrid.Children.Add(statTxtStack);
 
-            // TUNE NOW Button
-            btnTuneNow = new Button();
+            // Modern TUNE NOW Button
+            btnTuneNow = ModernButton.CreateHero("TUNE NOW", 150, 46);
             Grid.SetColumn(btnTuneNow, 2);
-            btnTuneNow.Height = 44;
             btnTuneNow.HorizontalAlignment = HorizontalAlignment.Right;
             btnTuneNow.VerticalAlignment = VerticalAlignment.Center;
-            btnTuneNow.Padding = new Thickness(24, 0, 24, 0);
-            btnTuneNow.Cursor = Cursors.Hand;
-
-            LinearGradientBrush btnBrush = new LinearGradientBrush();
-            btnBrush.StartPoint = new Point(0, 0);
-            btnBrush.EndPoint = new Point(1, 1);
-            btnBrush.GradientStops.Add(new GradientStop(Color.FromRgb(16, 185, 129), 0.0));
-            btnBrush.GradientStops.Add(new GradientStop(Color.FromRgb(5, 150, 105), 1.0));
-            btnTuneNow.Background = btnBrush;
-            btnTuneNow.BorderBrush = new SolidColorBrush(Color.FromRgb(52, 211, 153));
-            btnTuneNow.BorderThickness = new Thickness(1);
-
-            btnTuneNowText = new TextBlock { Text = "TUNE NOW", FontSize = 12, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
-            btnTuneNow.Content = btnTuneNowText;
             btnTuneNow.Click += delegate { TriggerTuneAction(); };
 
             statusGrid.Children.Add(btnTuneNow);
@@ -714,15 +985,15 @@ namespace RobloxNetworkTuner
             // Row 2: Active Controls Card
             Border ctrlCard = new Border();
             Grid.SetRow(ctrlCard, 2);
-            ctrlCard.CornerRadius = new CornerRadius(8);
-            ctrlCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            ctrlCard.CornerRadius = new CornerRadius(10);
+            ctrlCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             ctrlCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             ctrlCard.BorderThickness = new Thickness(1);
 
             StackPanel ctrlStack = new StackPanel();
-            ctrlStack.Margin = new Thickness(16, 12, 16, 12);
+            ctrlStack.Margin = new Thickness(18, 14, 18, 14);
 
-            TextBlock ctrlHead = new TextBlock { Text = "ACTIVE PROFILES", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 0, 0, 8) };
+            TextBlock ctrlHead = new TextBlock { Text = "ACTIVE PROFILES", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 0, 0, 8) };
             ctrlStack.Children.Add(ctrlHead);
 
             // Switch 1: Performance Mode
@@ -740,13 +1011,13 @@ namespace RobloxNetworkTuner
 
             // Contention Status
             StackPanel contStack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            dotCompetingTraffic = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(Color.FromRgb(52, 211, 153)), VerticalAlignment = VerticalAlignment.Center };
+            dotCompetingTraffic = new Ellipse { Width = 6.5, Height = 6.5, Fill = new SolidColorBrush(Color.FromRgb(52, 211, 153)), VerticalAlignment = VerticalAlignment.Center };
             txtCompetingTraffic = new TextBlock
             {
                 Text = "Normal network conditions (No heavy background contention)",
-                FontSize = 10,
+                FontSize = 10.5,
                 Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)),
-                Margin = new Thickness(6, 0, 0, 0)
+                Margin = new Thickness(7, 0, 0, 0)
             };
             contStack.Children.Add(dotCompetingTraffic);
             contStack.Children.Add(txtCompetingTraffic);
@@ -762,15 +1033,15 @@ namespace RobloxNetworkTuner
         {
             Border card = new Border();
             Grid.SetColumn(card, colIndex);
-            card.CornerRadius = new CornerRadius(8);
-            card.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            card.CornerRadius = new CornerRadius(10);
+            card.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             card.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             card.BorderThickness = new Thickness(1);
 
             Grid cg = new Grid();
-            cg.Margin = new Thickness(12, 10, 12, 8);
+            cg.Margin = new Thickness(14, 12, 14, 10);
             cg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(16) });
-            cg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
+            cg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });
             cg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
             TextBlock tTitle = new TextBlock { Text = title, FontSize = 9.5, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) };
@@ -789,13 +1060,14 @@ namespace RobloxNetworkTuner
         private Grid CreateControlRow(string title, string subtitle, AnimatedToggleSwitch toggle)
         {
             Grid r = new Grid();
+            r.Margin = new Thickness(0, 3, 0, 3);
             r.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            r.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
+            r.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
 
             StackPanel sp = new StackPanel();
             sp.VerticalAlignment = VerticalAlignment.Center;
             TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
-            TextBlock s = new TextBlock { Text = subtitle, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) };
+            TextBlock s = new TextBlock { Text = subtitle, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 1, 0, 0) };
             sp.Children.Add(t);
             sp.Children.Add(s);
             r.Children.Add(sp);
@@ -812,19 +1084,19 @@ namespace RobloxNetworkTuner
         {
             Grid grid = new Grid();
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(54) });
 
             // Tuning Options Card
             Border card = new Border();
-            card.CornerRadius = new CornerRadius(8);
-            card.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            card.CornerRadius = new CornerRadius(10);
+            card.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             card.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             card.BorderThickness = new Thickness(1);
 
             ScrollViewer scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-            StackPanel list = new StackPanel { Margin = new Thickness(16, 12, 16, 12) };
+            StackPanel list = new StackPanel { Margin = new Thickness(8, 12, 8, 12) };
 
-            TextBlock h = new TextBlock { Text = "KERNEL & SOCKET TUNING", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 0, 0, 8) };
+            TextBlock h = new TextBlock { Text = "KERNEL & SOCKET TUNING", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(12, 0, 0, 8) };
             list.Children.Add(h);
 
             switchTimer = new AnimatedToggleSwitch(true);
@@ -858,12 +1130,20 @@ namespace RobloxNetworkTuner
             // Action Buttons Footer
             StackPanel actions = new StackPanel();
             Grid.SetRow(actions, 1);
+            actions.Margin = new Thickness(0, 12, 0, 0);
             actions.Orientation = Orientation.Horizontal;
             actions.VerticalAlignment = VerticalAlignment.Center;
 
-            Button btnReapply = CreateActionButton("Re-Apply Tuning", Color.FromRgb(16, 185, 129), delegate { TriggerReapplyAsync(); });
-            Button btnRestore = CreateActionButton("Restore Defaults", Color.FromRgb(244, 63, 94), delegate { TriggerRestoreAsync(); });
-            Button btnQuickBb = CreateActionButton("Bufferbloat Test", Color.FromRgb(56, 189, 248), delegate { TriggerBufferbloatAsync(); });
+            ModernButton btnReapply = ModernButton.CreateAction("Re-Apply Tuning", Color.FromRgb(16, 185, 129), 36);
+            btnReapply.Margin = new Thickness(0, 0, 10, 0);
+            btnReapply.Click += delegate { TriggerReapplyAsync(); };
+
+            ModernButton btnRestore = ModernButton.CreateAction("Restore Defaults", Color.FromRgb(244, 63, 94), 36);
+            btnRestore.Margin = new Thickness(0, 0, 10, 0);
+            btnRestore.Click += delegate { TriggerRestoreAsync(); };
+
+            ModernButton btnQuickBb = ModernButton.CreateAction("Bufferbloat Test", Color.FromRgb(56, 189, 248), 36);
+            btnQuickBb.Click += delegate { TriggerBufferbloatAsync(); };
 
             actions.Children.Add(btnReapply);
             actions.Children.Add(btnRestore);
@@ -872,10 +1152,10 @@ namespace RobloxNetworkTuner
             txtBufferbloatQuickStatus = new TextBlock
             {
                 Text = bufferbloatResultText,
-                FontSize = 10,
+                FontSize = 10.5,
                 Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)),
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(12, 0, 0, 0)
+                Margin = new Thickness(14, 0, 0, 0)
             };
             actions.Children.Add(txtBufferbloatQuickStatus);
 
@@ -883,16 +1163,22 @@ namespace RobloxNetworkTuner
             return grid;
         }
 
-        private Grid CreateTuningRow(string title, string subtitle, AnimatedToggleSwitch toggle)
+        private Border CreateTuningRow(string title, string subtitle, AnimatedToggleSwitch toggle)
         {
+            Border rowBorder = new Border();
+            rowBorder.CornerRadius = new CornerRadius(8);
+            rowBorder.Margin = new Thickness(0, 2, 0, 2);
+            rowBorder.Padding = new Thickness(12, 7, 12, 7);
+            rowBorder.Background = Brushes.Transparent;
+
             Grid row = new Grid();
-            row.Margin = new Thickness(0, 4, 0, 4);
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
 
             StackPanel sp = new StackPanel();
-            TextBlock t = new TextBlock { Text = title, FontSize = 11.5, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
-            TextBlock s = new TextBlock { Text = subtitle, FontSize = 9.5, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) };
+            sp.VerticalAlignment = VerticalAlignment.Center;
+            TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
+            TextBlock s = new TextBlock { Text = subtitle, FontSize = 9.5, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 1, 0, 0) };
             sp.Children.Add(t);
             sp.Children.Add(s);
             row.Children.Add(sp);
@@ -902,43 +1188,38 @@ namespace RobloxNetworkTuner
             toggle.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(toggle);
 
-            return row;
-        }
+            rowBorder.Child = row;
 
-        private Button CreateActionButton(string text, Color borderColor, RoutedEventHandler onClick)
-        {
-            Button btn = new Button();
-            btn.Content = text;
-            btn.Height = 34;
-            btn.Margin = new Thickness(0, 0, 10, 0);
-            btn.Padding = new Thickness(14, 0, 14, 0);
-            btn.Background = new SolidColorBrush(Color.FromArgb(25, borderColor.R, borderColor.G, borderColor.B));
-            btn.BorderBrush = new SolidColorBrush(borderColor);
-            btn.BorderThickness = new Thickness(1);
-            btn.Foreground = new SolidColorBrush(borderColor);
-            btn.FontWeight = FontWeights.Bold;
-            btn.FontSize = 11;
-            btn.Cursor = Cursors.Hand;
-            btn.Click += onClick;
-            return btn;
+            rowBorder.MouseEnter += delegate
+            {
+                ColorAnimation ca = new ColorAnimation(Color.FromRgb(18, 24, 36), new Duration(TimeSpan.FromMilliseconds(120)));
+                rowBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+            };
+            rowBorder.MouseLeave += delegate
+            {
+                ColorAnimation ca = new ColorAnimation(Colors.Transparent, new Duration(TimeSpan.FromMilliseconds(120)));
+                rowBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+            };
+
+            return rowBorder;
         }
 
         private Grid BuildStatisticsView()
         {
             Grid grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(82) }); // Route Hops Card
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(88) }); // Route Hops Card
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Big Waveform Card
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(90) }); // Bufferbloat Card
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(92) }); // Bufferbloat Card
 
             // Card 1: Route Latency
             Border hopCard = new Border();
-            hopCard.CornerRadius = new CornerRadius(8);
-            hopCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            hopCard.CornerRadius = new CornerRadius(10);
+            hopCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             hopCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             hopCard.BorderThickness = new Thickness(1);
 
-            StackPanel hopStack = new StackPanel { Margin = new Thickness(16, 10, 16, 10) };
-            TextBlock hopHead = new TextBlock { Text = "ROUTE TELEMETRY", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 0, 0, 6) };
+            StackPanel hopStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            TextBlock hopHead = new TextBlock { Text = "ROUTE TELEMETRY", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 0, 0, 8) };
             hopStack.Children.Add(hopHead);
 
             StackPanel pills = new StackPanel { Orientation = Orientation.Horizontal };
@@ -959,32 +1240,32 @@ namespace RobloxNetworkTuner
             // Card 2: Big Telemetry Waveform
             Border waveCard = new Border();
             Grid.SetRow(waveCard, 1);
-            waveCard.Margin = new Thickness(0, 8, 0, 8);
-            waveCard.CornerRadius = new CornerRadius(8);
-            waveCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            waveCard.Margin = new Thickness(0, 10, 0, 10);
+            waveCard.CornerRadius = new CornerRadius(10);
+            waveCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             waveCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             waveCard.BorderThickness = new Thickness(1);
 
             Grid wg = new Grid();
-            wg.Margin = new Thickness(16, 10, 16, 10);
+            wg.Margin = new Thickness(18, 12, 18, 12);
             wg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(20) });
-            wg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) });
+            wg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(40) });
             wg.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            TextBlock wTitle = new TextBlock { Text = "LIVE PING & JITTER WAVEFORM", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) };
+            TextBlock wTitle = new TextBlock { Text = "LIVE PING & JITTER WAVEFORM", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) };
             wg.Children.Add(wTitle);
 
             // Metric values row
             StackPanel metricsRow = new StackPanel { Orientation = Orientation.Horizontal };
             Grid.SetRow(metricsRow, 1);
 
-            txtStatRttVal = new TextBlock { Text = "24.2 ms", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)) };
+            txtStatRttVal = new TextBlock { Text = "24.2 ms", FontSize = 19, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)) };
             metricsRow.Children.Add(CreateStatMetric("ROUND-TRIP TIME", txtStatRttVal));
 
-            txtStatJitterVal = new TextBlock { Text = "±0.45 ms", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
+            txtStatJitterVal = new TextBlock { Text = "±0.45 ms", FontSize = 19, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
             metricsRow.Children.Add(CreateStatMetric("RFC 3550 JITTER", txtStatJitterVal));
 
-            txtStatLossVal = new TextBlock { Text = "0.0%", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(244, 114, 182)) };
+            txtStatLossVal = new TextBlock { Text = "0.0%", FontSize = 19, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(244, 114, 182)) };
             metricsRow.Children.Add(CreateStatMetric("PACKET LOSS", txtStatLossVal));
 
             wg.Children.Add(metricsRow);
@@ -1000,26 +1281,28 @@ namespace RobloxNetworkTuner
             // Card 3: Bufferbloat
             Border bbCard = new Border();
             Grid.SetRow(bbCard, 2);
-            bbCard.CornerRadius = new CornerRadius(8);
-            bbCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            bbCard.CornerRadius = new CornerRadius(10);
+            bbCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             bbCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             bbCard.BorderThickness = new Thickness(1);
 
             Grid bbg = new Grid();
-            bbg.Margin = new Thickness(16, 10, 16, 10);
+            bbg.Margin = new Thickness(18, 12, 18, 12);
             bbg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            bbg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+            bbg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
 
             StackPanel bbTxt = new StackPanel();
-            TextBlock bbHead = new TextBlock { Text = "BUFFERBLOAT DIAGNOSTIC", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) };
-            txtStatBufferbloat = new TextBlock { Text = bufferbloatResultText, FontSize = 11, Foreground = Brushes.White, Margin = new Thickness(0, 4, 0, 0) };
+            bbTxt.VerticalAlignment = VerticalAlignment.Center;
+            TextBlock bbHead = new TextBlock { Text = "BUFFERBLOAT DIAGNOSTIC", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) };
+            txtStatBufferbloat = new TextBlock { Text = bufferbloatResultText, FontSize = 11.5, Foreground = Brushes.White, Margin = new Thickness(0, 4, 0, 0) };
             bbTxt.Children.Add(bbHead);
             bbTxt.Children.Add(txtStatBufferbloat);
             bbg.Children.Add(bbTxt);
 
-            btnRunBufferbloat = CreateActionButton("Run Test", Color.FromRgb(52, 211, 153), delegate { TriggerBufferbloatAsync(); });
+            btnRunBufferbloat = ModernButton.CreateAction("Run Test", Color.FromRgb(52, 211, 153), 36);
             btnRunBufferbloat.HorizontalAlignment = HorizontalAlignment.Right;
             btnRunBufferbloat.VerticalAlignment = VerticalAlignment.Center;
+            btnRunBufferbloat.Click += delegate { TriggerBufferbloatAsync(); };
             Grid.SetColumn(btnRunBufferbloat, 1);
             bbg.Children.Add(btnRunBufferbloat);
 
@@ -1032,11 +1315,11 @@ namespace RobloxNetworkTuner
         private Border CreateRoutePill(string initial, out TextBlock tbOut, Color accent)
         {
             Border p = new Border();
-            p.CornerRadius = new CornerRadius(6);
-            p.Background = new SolidColorBrush(Color.FromRgb(16, 22, 28));
+            p.CornerRadius = new CornerRadius(7);
+            p.Background = new SolidColorBrush(Color.FromRgb(16, 22, 32));
             p.BorderBrush = new SolidColorBrush(accent);
             p.BorderThickness = new Thickness(1);
-            p.Padding = new Thickness(12, 5, 12, 5);
+            p.Padding = new Thickness(14, 6, 14, 6);
 
             TextBlock tb = new TextBlock { Text = initial, FontSize = 10.5, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(accent) };
             p.Child = tb;
@@ -1056,27 +1339,29 @@ namespace RobloxNetworkTuner
         private Grid BuildSettingsView()
         {
             Grid grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(110) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(112) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(118) });
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
             // Card 1: About
             Border aboutCard = new Border();
-            aboutCard.CornerRadius = new CornerRadius(8);
-            aboutCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            aboutCard.CornerRadius = new CornerRadius(10);
+            aboutCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             aboutCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             aboutCard.BorderThickness = new Thickness(1);
 
-            StackPanel aboutStack = new StackPanel { Margin = new Thickness(16, 10, 16, 10) };
-            aboutStack.Children.Add(new TextBlock { Text = "ABOUT", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) });
-            aboutStack.Children.Add(new TextBlock { Text = "Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", FontSize = 13, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 1) });
-            aboutStack.Children.Add(new TextBlock { Text = "High-performance latency optimization for competitive Roblox gameplay.", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
+            StackPanel aboutStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            aboutStack.Children.Add(new TextBlock { Text = "ABOUT", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
+            aboutStack.Children.Add(new TextBlock { Text = "Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 1) });
+            aboutStack.Children.Add(new TextBlock { Text = "Low-latency network and scheduler optimization for competitive Roblox gameplay.", FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) });
 
-            Button btnGh = CreateActionButton("Open GitHub Repository", Color.FromRgb(56, 189, 248), delegate
+            ModernButton btnGh = ModernButton.CreateAction("Open GitHub Repository", Color.FromRgb(56, 189, 248), 34);
+            btnGh.HorizontalAlignment = HorizontalAlignment.Left;
+            btnGh.Margin = new Thickness(0, 8, 0, 0);
+            btnGh.Click += delegate
             {
                 try { Process.Start("https://github.com/getsentrix/RBLX-Network-Tuner"); } catch { }
-            });
-            btnGh.Margin = new Thickness(0, 8, 0, 0);
+            };
             aboutStack.Children.Add(btnGh);
             aboutCard.Child = aboutStack;
             grid.Children.Add(aboutCard);
@@ -1084,18 +1369,20 @@ namespace RobloxNetworkTuner
             // Card 2: Updates
             Border upCard = new Border();
             Grid.SetRow(upCard, 1);
-            upCard.Margin = new Thickness(0, 8, 0, 8);
-            upCard.CornerRadius = new CornerRadius(8);
-            upCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            upCard.Margin = new Thickness(0, 10, 0, 10);
+            upCard.CornerRadius = new CornerRadius(10);
+            upCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             upCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             upCard.BorderThickness = new Thickness(1);
 
-            StackPanel upStack = new StackPanel { Margin = new Thickness(16, 10, 16, 10) };
-            upStack.Children.Add(new TextBlock { Text = "AUTO-UPDATE ENGINE", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) });
-            txtUpdateInfo = new TextBlock { Text = "Automatic GitHub releases check active.", FontSize = 10.5, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 6) };
+            StackPanel upStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            upStack.Children.Add(new TextBlock { Text = "AUTO-UPDATE ENGINE", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
+            txtUpdateInfo = new TextBlock { Text = "Automatic GitHub releases check active.", FontSize = 11, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 8) };
             upStack.Children.Add(txtUpdateInfo);
 
-            btnCheckUpdate = CreateActionButton("Check for Updates", Color.FromRgb(52, 211, 153), delegate { TriggerUpdateCheckAsync(true); });
+            btnCheckUpdate = ModernButton.CreateAction("Check for Updates", Color.FromRgb(52, 211, 153), 34);
+            btnCheckUpdate.HorizontalAlignment = HorizontalAlignment.Left;
+            btnCheckUpdate.Click += delegate { TriggerUpdateCheckAsync(true); };
             upStack.Children.Add(btnCheckUpdate);
             upCard.Child = upStack;
             grid.Children.Add(upCard);
@@ -1103,29 +1390,34 @@ namespace RobloxNetworkTuner
             // Card 3: Safety & Rollback
             Border safeCard = new Border();
             Grid.SetRow(safeCard, 2);
-            safeCard.CornerRadius = new CornerRadius(8);
-            safeCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 25));
+            safeCard.CornerRadius = new CornerRadius(10);
+            safeCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             safeCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             safeCard.BorderThickness = new Thickness(1);
 
-            StackPanel safeStack = new StackPanel { Margin = new Thickness(16, 10, 16, 10) };
-            safeStack.Children.Add(new TextBlock { Text = "SAFETY & CRASH RECOVERY", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) });
-            safeStack.Children.Add(new TextBlock { Text = "Every modified registry key, QoS policy, timer resolution, and adapter setting is guaranteed to restore to defaults when Roblox exits or upon closing.", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 3, 0, 8) });
+            StackPanel safeStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            safeStack.Children.Add(new TextBlock { Text = "SAFETY & CRASH RECOVERY", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
+            safeStack.Children.Add(new TextBlock { Text = "Every modified registry key, QoS policy, timer resolution, and adapter setting is guaranteed to restore to defaults when Roblox exits or upon closing.", FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 3, 0, 10) });
 
             StackPanel safeBtns = new StackPanel { Orientation = Orientation.Horizontal };
-            Button btnVer = CreateActionButton("Verify Restoration", Color.FromRgb(56, 189, 248), delegate
+            ModernButton btnVer = ModernButton.CreateAction("Verify Restoration", Color.FromRgb(56, 189, 248), 34);
+            btnVer.Margin = new Thickness(0, 0, 10, 0);
+            btnVer.Click += delegate
             {
                 TriggerRestoreAsync();
                 MessageBox.Show("Defaults fully restored and verified.", "Verified", MessageBoxButton.OK, MessageBoxImage.Information);
-            });
-            Button btnTray = CreateActionButton("Minimize to Tray", Color.FromRgb(148, 163, 184), delegate
+            };
+
+            ModernButton btnTray = ModernButton.CreateAction("Minimize to Tray", Color.FromRgb(148, 163, 184), 34);
+            btnTray.Click += delegate
             {
                 this.Hide();
                 if (trayIcon != null)
                 {
                     trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Collapsed to system tray.", WinForms.ToolTipIcon.Info);
                 }
-            });
+            };
+
             safeBtns.Children.Add(btnVer);
             safeBtns.Children.Add(btnTray);
             safeStack.Children.Add(safeBtns);
@@ -1145,8 +1437,17 @@ namespace RobloxNetworkTuner
             if (currentTab == targetTab) return;
             currentTab = targetTab;
 
+            // Update sidebar button states
+            for (int i = 0; i < sidebarButtons.Count; i++)
+            {
+                bool isSelected = (i == (int)targetTab);
+                sidebarButtons[i].Background = isSelected ? new SolidColorBrush(Color.FromRgb(19, 27, 42)) : Brushes.Transparent;
+                sidebarLabels[i].FontWeight = isSelected ? FontWeights.Bold : FontWeights.Normal;
+                sidebarLabels[i].Foreground = new SolidColorBrush(isSelected ? Colors.White : Color.FromRgb(148, 163, 184));
+            }
+
             // 1. Animate Sidebar Indicator Bar
-            double targetY = (int)targetTab * 44;
+            double targetY = (int)targetTab * 48;
             DoubleAnimation slideAnim = new DoubleAnimation(targetY, new Duration(TimeSpan.FromMilliseconds(180)));
             slideAnim.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
             indicatorTransform.BeginAnimation(TranslateTransform.YProperty, slideAnim);
@@ -1299,9 +1600,9 @@ namespace RobloxNetworkTuner
                             ? (isLiveGameServer ? ("Connected: " + liveTarget) : "Roblox Running: Monitoring telemetry...")
                             : "Standby: Monitoring Roblox client...";
 
-                        if (btnTuneNowText != null)
+                        if (btnTuneNow != null)
                         {
-                            btnTuneNowText.Text = isTuningApplied ? "TUNED ✓" : "TUNE NOW";
+                            btnTuneNow.Text = isTuningApplied ? "TUNED ✓" : "TUNE NOW";
                         }
 
                         // Update traffic dot
@@ -1340,7 +1641,7 @@ namespace RobloxNetworkTuner
         {
             if (isTuningInProgress) return;
             isTuningInProgress = true;
-            btnTuneNowText.Text = "TUNING...";
+            btnTuneNow.Text = "TUNING...";
 
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -1354,7 +1655,7 @@ namespace RobloxNetworkTuner
                 this.Dispatcher.BeginInvoke(new Action(delegate
                 {
                     isTuningInProgress = false;
-                    btnTuneNowText.Text = "TUNED ✓";
+                    btnTuneNow.Text = "TUNED ✓";
                     txtOptTitle.Text = "Optimized Successfully";
                 }));
             });
@@ -1392,7 +1693,7 @@ namespace RobloxNetworkTuner
                 this.Dispatcher.BeginInvoke(new Action(delegate
                 {
                     txtOptTitle.Text = "Not Optimized";
-                    btnTuneNowText.Text = "TUNE NOW";
+                    btnTuneNow.Text = "TUNE NOW";
                 }));
             });
         }
@@ -1459,13 +1760,13 @@ namespace RobloxNetworkTuner
                                 {
                                     txtUpdateInfo.Text = "Update Available: " + latestRelease.TagName + " (Current: v" + GitHubUpdateModule.CurrentVersion + ")";
                                 }
-                                if (txtHeaderVer != null)
+                                if (verPillBtn != null)
                                 {
-                                    txtHeaderVer.Text = "UPDATE";
+                                    verPillBtn.Text = "UPDATE";
                                 }
                                 if (btnCheckUpdate != null)
                                 {
-                                    btnCheckUpdate.Content = "Install Update";
+                                    btnCheckUpdate.Text = "Install Update";
                                 }
                             }));
                         }
@@ -1512,7 +1813,6 @@ namespace RobloxNetworkTuner
                 trayIcon.Text = "Roblox Network Tuner";
                 trayIcon.Visible = true;
 
-                // Use app icon if available, otherwise generic
                 try
                 {
                     string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
