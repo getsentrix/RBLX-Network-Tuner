@@ -1570,6 +1570,266 @@ namespace RobloxNetworkTuner
 
     #endregion
 
+    #region GitHub Releases Auto-Update Engine
+
+    internal static class GitHubUpdateModule
+    {
+        public const string CurrentVersion = "2.0.0";
+        public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
+
+        public class ReleaseInfo
+        {
+            public string TagName;
+            public Version ReleaseVersion;
+            public string ExeDownloadUrl;
+            public string SetupDownloadUrl;
+            public string ReleaseNotes;
+        }
+
+        public static void CheckForUpdateAsync()
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    ReleaseInfo rel = FetchLatestRelease();
+                    if (rel != null && rel.ReleaseVersion != null)
+                    {
+                        Version curVer = new Version(CurrentVersion);
+                        if (rel.ReleaseVersion > curVer)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Cyan;
+                            Console.WriteLine("\n [UPDATE] New release available: {0} (Current: v{1})", rel.TagName, CurrentVersion);
+                            Console.WriteLine("          Run: RobloxNetworkTuner.exe --update to install automatically.");
+                            Console.ResetColor();
+                        }
+                    }
+                }
+                catch { }
+            });
+        }
+
+        public static void CheckForUpdate(bool autoUpdate)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("================================================================================");
+            Console.WriteLine(" ROBLOX NETWORK TUNER - GITHUB UPDATE CHECKER");
+            Console.WriteLine(" Installed Version: v{0}", CurrentVersion);
+            Console.WriteLine("================================================================================");
+            Console.ResetColor();
+            Console.Write(" [*] Querying GitHub releases API ... ");
+
+            try
+            {
+                ReleaseInfo rel = FetchLatestRelease();
+                if (rel == null || rel.ReleaseVersion == null)
+                {
+                    Program.PrintInfo("UP TO DATE / NO RELEASES FOUND");
+                    return;
+                }
+
+                Version curVer = new Version(CurrentVersion);
+                if (rel.ReleaseVersion > curVer)
+                {
+                    Program.PrintSuccess("UPDATE AVAILABLE (" + rel.TagName + ")");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("\n New release found: {0}", rel.TagName);
+                    if (!string.IsNullOrEmpty(rel.ReleaseNotes))
+                    {
+                        Console.WriteLine(" Release Title: {0}", rel.ReleaseNotes);
+                    }
+                    Console.ResetColor();
+
+                    if (autoUpdate)
+                    {
+                        PerformUpdateWithRelease(rel);
+                    }
+                    else
+                    {
+                        Console.WriteLine("\n Run 'RobloxNetworkTuner.exe --update' to apply this update.");
+                    }
+                }
+                else
+                {
+                    Program.PrintSuccess("UP TO DATE (v" + CurrentVersion + " is current)");
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.PrintInfo("SKIPPED (" + ex.Message + ")");
+            }
+        }
+
+        public static void PerformUpdate()
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("================================================================================");
+            Console.WriteLine(" ROBLOX NETWORK TUNER - AUTOMATIC IN-PLACE UPDATER");
+            Console.WriteLine(" Current Version: v{0}", CurrentVersion);
+            Console.WriteLine("================================================================================");
+            Console.ResetColor();
+            Console.Write(" [*] Fetching latest release metadata from GitHub ... ");
+
+            try
+            {
+                ReleaseInfo rel = FetchLatestRelease();
+                if (rel == null || rel.ReleaseVersion == null)
+                {
+                    Program.PrintInfo("NO RELEASES FOUND");
+                    return;
+                }
+
+                Version curVer = new Version(CurrentVersion);
+                if (rel.ReleaseVersion <= curVer)
+                {
+                    Program.PrintSuccess("ALREADY UP TO DATE (v" + CurrentVersion + ")");
+                    return;
+                }
+
+                Program.PrintSuccess("FOUND " + rel.TagName);
+                PerformUpdateWithRelease(rel);
+            }
+            catch (Exception ex)
+            {
+                Program.PrintError("FAIL: " + ex.Message);
+            }
+        }
+
+        private static void PerformUpdateWithRelease(ReleaseInfo rel)
+        {
+            if (string.IsNullOrEmpty(rel.ExeDownloadUrl))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine(" [!] No standalone RobloxNetworkTuner.exe asset in release {0}.", rel.TagName);
+                Console.ResetColor();
+                return;
+            }
+
+            Console.Write(" [*] Downloading updated binary payload ... ");
+            string currentExe = Process.GetCurrentProcess().MainModule.FileName;
+            string tempDownload = Path.Combine(Path.GetTempPath(), "RobloxNetworkTuner_update.exe");
+            string backupExe = currentExe + ".old";
+
+            try
+            {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.0");
+                    wc.DownloadFile(rel.ExeDownloadUrl, tempDownload);
+                }
+
+                FileInfo fi = new FileInfo(tempDownload);
+                if (!fi.Exists || fi.Length < 10000)
+                {
+                    throw new IOException("Downloaded update file is invalid or corrupted.");
+                }
+                Program.PrintSuccess(string.Format("DONE ({0:N0} bytes)", fi.Length));
+
+                Console.Write(" [*] Applying in-place binary swap ... ");
+                if (File.Exists(backupExe))
+                {
+                    try { File.Delete(backupExe); } catch { }
+                }
+
+                File.Move(currentExe, backupExe);
+                File.Move(tempDownload, currentExe);
+                Program.PrintSuccess("DONE");
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\n================================================================================");
+                Console.WriteLine(" SUCCESS: Updated Roblox Network Tuner to {0}!", rel.TagName);
+                Console.WriteLine(" Backup of previous binary saved to: {0}.old", Path.GetFileName(currentExe));
+                Console.WriteLine("================================================================================");
+                Console.ResetColor();
+            }
+            catch (Exception ex)
+            {
+                Program.PrintError("FAIL: " + ex.Message);
+                if (!File.Exists(currentExe) && File.Exists(backupExe))
+                {
+                    try { File.Move(backupExe, currentExe); } catch { }
+                }
+            }
+        }
+
+        private static ReleaseInfo FetchLatestRelease()
+        {
+            try
+            {
+                string repo = DefaultGitHubRepo;
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\RobloxNetworkTuner"))
+                {
+                    if (k != null)
+                    {
+                        object custom = k.GetValue("GitHubRepo");
+                        if (custom != null && !string.IsNullOrEmpty(custom.ToString()))
+                        {
+                            repo = custom.ToString().Trim();
+                        }
+                    }
+                }
+
+                string apiUrl = string.Format("https://api.github.com/repos/{0}/releases/latest", repo);
+
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                string json;
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.0");
+                    wc.Headers.Add("Accept", "application/vnd.github.v3+json");
+                    json = wc.DownloadString(apiUrl);
+                }
+
+                if (string.IsNullOrEmpty(json)) return null;
+
+                ReleaseInfo info = new ReleaseInfo();
+                Match tagMatch = Regex.Match(json, @"""tag_name""\s*:\s*""([^""]+)""");
+                if (tagMatch.Success)
+                {
+                    info.TagName = tagMatch.Groups[1].Value.Trim();
+                    string cleanVer = info.TagName.TrimStart('v', 'V');
+                    Version v;
+                    if (Version.TryParse(cleanVer, out v))
+                    {
+                        info.ReleaseVersion = v;
+                    }
+                    else if (cleanVer.Split('.').Length == 2)
+                    {
+                        Version.TryParse(cleanVer + ".0", out v);
+                        info.ReleaseVersion = v;
+                    }
+                }
+
+                Match exeMatch = Regex.Match(json, @"""browser_download_url""\s*:\s*""([^""]*RobloxNetworkTuner\.exe)""");
+                if (exeMatch.Success)
+                {
+                    info.ExeDownloadUrl = exeMatch.Groups[1].Value;
+                }
+
+                Match setupMatch = Regex.Match(json, @"""browser_download_url""\s*:\s*""([^""]*RobloxNetworkTunerSetup\.exe)""");
+                if (setupMatch.Success)
+                {
+                    info.SetupDownloadUrl = setupMatch.Groups[1].Value;
+                }
+
+                Match bodyMatch = Regex.Match(json, @"""name""\s*:\s*""([^""]+)""");
+                if (bodyMatch.Success)
+                {
+                    info.ReleaseNotes = bodyMatch.Groups[1].Value;
+                }
+
+                return info;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    #endregion
+
     #region Main Controller & Watchdog Session
 
     internal static class Program
@@ -1634,10 +1894,24 @@ namespace RobloxNetworkTuner
                     RunSelfTest();
                     return;
                 }
+                if (flag == "--check-update" || flag == "-check-update" || flag == "/checkupdate")
+                {
+                    GitHubUpdateModule.CheckForUpdate(false);
+                    return;
+                }
+                if (flag == "--update" || flag == "-update" || flag == "/update")
+                {
+                    if (!EnsureAdministrator(args)) return;
+                    GitHubUpdateModule.CheckForUpdate(true);
+                    return;
+                }
             }
 
             // Privileged Interactive Session
             if (!EnsureAdministrator(args)) return;
+
+            // Check for background updates silently
+            GitHubUpdateModule.CheckForUpdateAsync();
 
             // Register cleanup handlers
             ctrlHandler = ConsoleCtrlCheck;
@@ -1781,6 +2055,185 @@ namespace RobloxNetworkTuner
             RestoreAll();
         }
 
+        #region Managed Registry, Dynamic Interface & System Restore Infrastructure
+
+        internal static class RegistryManager
+        {
+            public static void SetDWord(RegistryKey key, string name, int value, RegistrySnapshot snap)
+            {
+                if (key == null) return;
+                if (snap != null && !snap.Values.ContainsKey(name))
+                {
+                    snap.Values[name] = key.GetValue(name);
+                }
+                key.SetValue(name, value, RegistryValueKind.DWord);
+            }
+
+            public static void SetString(RegistryKey key, string name, string value, RegistrySnapshot snap)
+            {
+                if (key == null) return;
+                if (snap != null && !snap.Values.ContainsKey(name))
+                {
+                    snap.Values[name] = key.GetValue(name);
+                }
+                key.SetValue(name, value, RegistryValueKind.String);
+            }
+
+            public static void RevertValue(RegistryKey key, string name, object origValue)
+            {
+                if (key == null) return;
+                try
+                {
+                    if (origValue != null)
+                    {
+                        key.SetValue(name, origValue);
+                    }
+                    else
+                    {
+                        key.DeleteValue(name, false);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        internal static class ActiveInterfaceDetector
+        {
+            public struct ActiveInterfaceInfo
+            {
+                public string Id;
+                public string Name;
+                public string Description;
+                public NetworkInterfaceType InterfaceType;
+                public int Mtu;
+                public IPAddress Ipv4Address;
+                public IPAddress Gateway;
+            }
+
+            public static List<ActiveInterfaceInfo> GetActiveInterfaces()
+            {
+                List<ActiveInterfaceInfo> result = new List<ActiveInterfaceInfo>();
+                try
+                {
+                    NetworkInterface[] nics = NetworkInterface.GetAllNetworkInterfaces();
+                    for (int i = 0; i < nics.Length; i++)
+                    {
+                        NetworkInterface nic = nics[i];
+                        if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                        if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                            nic.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue;
+
+                        string desc = (nic.Description ?? "").ToLowerInvariant();
+                        if (desc.Contains("virtual") || desc.Contains("vpn") || desc.Contains("hyper-v") ||
+                            desc.Contains("wsl") || desc.Contains("vmware") || desc.Contains("virtualbox") ||
+                            desc.Contains("bluetooth") || desc.Contains("pseudo"))
+                        {
+                            continue;
+                        }
+
+                        IPInterfaceProperties ipProps = nic.GetIPProperties();
+                        if (ipProps == null) continue;
+
+                        IPAddress v4 = null;
+                        if (ipProps.UnicastAddresses != null)
+                        {
+                            foreach (UnicastIPAddressInformation u in ipProps.UnicastAddresses)
+                            {
+                                if (u != null && u.Address != null && u.Address.AddressFamily == AddressFamily.InterNetwork)
+                                {
+                                    v4 = u.Address;
+                                    break;
+                                }
+                            }
+                        }
+                        if (v4 == null) continue;
+
+                        IPAddress gw = null;
+                        if (ipProps.GatewayAddresses != null)
+                        {
+                            foreach (GatewayIPAddressInformation g in ipProps.GatewayAddresses)
+                            {
+                                if (g != null && g.Address != null && g.Address.AddressFamily == AddressFamily.InterNetwork)
+                                {
+                                    gw = g.Address;
+                                    break;
+                                }
+                            }
+                        }
+
+                        int mtu = 1500;
+                        try
+                        {
+                            IPv4InterfaceProperties v4Props = ipProps.GetIPv4Properties();
+                            if (v4Props != null)
+                            {
+                                mtu = v4Props.Mtu;
+                            }
+                        }
+                        catch { }
+
+                        ActiveInterfaceInfo info = new ActiveInterfaceInfo();
+                        info.Id = nic.Id;
+                        info.Name = nic.Name;
+                        info.Description = nic.Description;
+                        info.InterfaceType = nic.NetworkInterfaceType;
+                        info.Mtu = mtu;
+                        info.Ipv4Address = v4;
+                        info.Gateway = gw;
+                        result.Add(info);
+                    }
+                }
+                catch { }
+                return result;
+            }
+        }
+
+        internal static class SystemRestoreModule
+        {
+            public static void CreateRestorePoint(string description)
+            {
+                Console.Write(" [*] Creating Windows System Restore checkpoint ........................ ");
+                try
+                {
+                    string wmiCmd = string.Format(
+                        "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                        "try {{ " +
+                        "  $sr = [wmiclass]'\\\\localhost\\root\\default:SystemRestore'; " +
+                        "  $res = $sr.CreateRestorePoint('{0}', 12, 100); " +
+                        "  if ($res.ReturnValue -eq 0) {{ exit 0 }} else {{ exit $res.ReturnValue }} " +
+                        "}} catch {{ exit 1 }}\"", description);
+
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = "powershell.exe";
+                    psi.Arguments = wmiCmd;
+                    psi.CreateNoWindow = true;
+                    psi.UseShellExecute = false;
+                    psi.WindowStyle = ProcessWindowStyle.Hidden;
+
+                    using (Process p = Process.Start(psi))
+                    {
+                        if (p != null)
+                        {
+                            bool finished = p.WaitForExit(10000);
+                            if (finished && p.ExitCode == 0)
+                            {
+                                Program.PrintSuccess("CREATED");
+                                return;
+                            }
+                        }
+                    }
+
+                    Program.PrintInfo("SKIPPED (Rate-limited / Inactive)");
+                }
+                catch (Exception ex)
+                {
+                    Program.PrintInfo("SKIPPED (" + ex.Message + ")");
+                }
+            }
+        }
+
+        #endregion
+
         private static void ApplyAll()
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -1793,13 +2246,16 @@ namespace RobloxNetworkTuner
             currentSnapshot = new TunerState();
             currentSnapshot.Timestamp = DateTime.UtcNow.ToString("o");
 
+            // 0. Automatic System Restore Point Creation
+            SystemRestoreModule.CreateRestorePoint("RobloxNetworkTuner Pre-Optimization Baseline");
+
             // 1. Winsock Ancillary Function Driver (AFD) Buffer Locking & UDP Fast-Path
             AfdOptimizationModule.Apply(currentSnapshot);
 
             // 2. TCP/IP PMTU Discovery & Black Hole Detection
             PmtuOptimizationModule.Apply(currentSnapshot);
 
-            // 3. Active Network Adapters TCP/IP (Nagle Disabled)
+            // 3. Dynamic Active Network Adapters TCP/IP & MTU (Nagle Disabled, MTU 1500)
             ApplyTcpipInterfaceSettings(currentSnapshot);
 
             // 4. Global TCP Stack Parameters (RSC, CUBIC, DCA)
@@ -1817,7 +2273,7 @@ namespace RobloxNetworkTuner
             // 8. MMCSS Multimedia Scheduler & System Responsiveness
             SchedulingModule.Apply(currentSnapshot);
 
-            // 9. Suspend Background Update Services & Flush Caches
+            // 9. Flush DNS Resolver & Purge ARP Cache
             ApplyServicesAndCaches(currentSnapshot);
 
             // Persist full snapshot to disk for out-of-process atomic rollback
@@ -1835,35 +2291,45 @@ namespace RobloxNetworkTuner
 
         private static void ApplyTcpipInterfaceSettings(TunerState state)
         {
-            Console.Write(" [*] TCP/IP interfaces: Nagle disabled (TcpAckFrequency=1, TCPNoDelay=1) ");
+            Console.Write(" [*] Active TCP/IP adapters: Nagle disabled & unfragmented MTU (1500) .. ");
             try
             {
-                NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
-                foreach (NetworkInterface nic in interfaces)
+                List<ActiveInterfaceDetector.ActiveInterfaceInfo> activeNics = ActiveInterfaceDetector.GetActiveInterfaces();
+                if (activeNics.Count == 0)
                 {
-                    if (nic.OperationalStatus == OperationalStatus.Up && nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                    {
-                        string guid = nic.Id;
-                        string path = @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\" + guid;
-                        using (RegistryKey nicKey = Registry.LocalMachine.OpenSubKey(path, true))
-                        {
-                            if (nicKey != null)
-                            {
-                                RegistrySnapshot snap = new RegistrySnapshot();
-                                snap.KeyPath = "HKLM\\" + path;
-                                snap.Values["TcpAckFrequency"] = nicKey.GetValue("TcpAckFrequency");
-                                snap.Values["TCPNoDelay"] = nicKey.GetValue("TCPNoDelay");
-                                snap.Values["TcpDelAckTicks"] = nicKey.GetValue("TcpDelAckTicks");
-                                state.RegistrySnapshots.Add(snap);
+                    PrintInfo("SKIPPED (No Active IPv4 NICs)");
+                    return;
+                }
 
-                                nicKey.SetValue("TcpAckFrequency", 1, RegistryValueKind.DWord);
-                                nicKey.SetValue("TCPNoDelay", 1, RegistryValueKind.DWord);
-                                nicKey.SetValue("TcpDelAckTicks", 0, RegistryValueKind.DWord);
-                            }
+                int tunedCount = 0;
+                for (int i = 0; i < activeNics.Count; i++)
+                {
+                    ActiveInterfaceDetector.ActiveInterfaceInfo nic = activeNics[i];
+                    string path = @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\" + nic.Id;
+                    using (RegistryKey nicKey = Registry.LocalMachine.OpenSubKey(path, true))
+                    {
+                        if (nicKey != null)
+                        {
+                            RegistrySnapshot snap = new RegistrySnapshot();
+                            snap.KeyPath = "HKLM\\" + path;
+                            snap.Values["TcpAckFrequency"] = nicKey.GetValue("TcpAckFrequency");
+                            snap.Values["TCPNoDelay"] = nicKey.GetValue("TCPNoDelay");
+                            snap.Values["TcpDelAckTicks"] = nicKey.GetValue("TcpDelAckTicks");
+                            snap.Values["MTU"] = nicKey.GetValue("MTU");
+                            state.RegistrySnapshots.Add(snap);
+
+                            RegistryManager.SetDWord(nicKey, "TcpAckFrequency", 1, null);
+                            RegistryManager.SetDWord(nicKey, "TCPNoDelay", 1, null);
+                            RegistryManager.SetDWord(nicKey, "TcpDelAckTicks", 0, null);
+                            RegistryManager.SetDWord(nicKey, "MTU", 1500, null);
+
+                            // Dynamically set MTU on the active subinterface
+                            RunSilent("netsh.exe", string.Format("interface ipv4 set subinterface \"{0}\" mtu=1500 store=active", nic.Name));
+                            tunedCount++;
                         }
                     }
                 }
-                PrintSuccess("DONE");
+                PrintSuccess(string.Format("DONE ({0} NIC{1})", tunedCount, tunedCount == 1 ? "" : "s"));
             }
             catch (Exception ex)
             {
@@ -2178,24 +2644,23 @@ namespace RobloxNetworkTuner
             // 6. TCP/IP interfaces
             try
             {
-                NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
-                foreach (NetworkInterface nic in interfaces)
+                List<ActiveInterfaceDetector.ActiveInterfaceInfo> activeNics = ActiveInterfaceDetector.GetActiveInterfaces();
+                foreach (ActiveInterfaceDetector.ActiveInterfaceInfo nic in activeNics)
                 {
-                    if (nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                    string path = @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\" + nic.Id;
+                    using (RegistryKey nicKey = Registry.LocalMachine.OpenSubKey(path, true))
                     {
-                        string path = @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\" + nic.Id;
-                        using (RegistryKey nicKey = Registry.LocalMachine.OpenSubKey(path, true))
+                        if (nicKey != null)
                         {
-                            if (nicKey != null)
-                            {
-                                nicKey.DeleteValue("TcpAckFrequency", false);
-                                nicKey.DeleteValue("TCPNoDelay", false);
-                                nicKey.DeleteValue("TcpDelAckTicks", false);
-                            }
+                            nicKey.DeleteValue("TcpAckFrequency", false);
+                            nicKey.DeleteValue("TCPNoDelay", false);
+                            nicKey.DeleteValue("TcpDelAckTicks", false);
+                            nicKey.DeleteValue("MTU", false);
                         }
                     }
+                    RunSilent("netsh.exe", string.Format("interface ipv4 set subinterface \"{0}\" mtu=1500 store=active", nic.Name));
                 }
-                Console.WriteLine("  [+] Restored TCP/IP interface parameters.");
+                Console.WriteLine("  [+] Restored TCP/IP interface parameters on active adapters.");
             }
             catch { }
 
@@ -2359,10 +2824,14 @@ namespace RobloxNetworkTuner
                 Console.WriteLine(" PMTU Blackhole Detection : {0}", bh != null ? (bh.ToString() == "1" ? "Enabled (1)" : "Disabled (0)") : "Not Configured (0)");
             }
 
-            // Wi-Fi
-            string wifiOut = RunCapture("netsh.exe", "wlan show interfaces");
-            Match mName = Regex.Match(wifiOut, @"^\s*Name\s*:\s*(.+)$", RegexOptions.Multiline);
-            Console.WriteLine(" Active Wi-Fi Interface   : {0}", mName.Success ? mName.Groups[1].Value.Trim() : "None / Ethernet");
+            // Active Interfaces
+            List<ActiveInterfaceDetector.ActiveInterfaceInfo> activeNics = ActiveInterfaceDetector.GetActiveInterfaces();
+            Console.WriteLine(" Active Physical Adapters : {0} detected", activeNics.Count);
+            for (int i = 0; i < activeNics.Count; i++)
+            {
+                ActiveInterfaceDetector.ActiveInterfaceInfo nic = activeNics[i];
+                Console.WriteLine("  -> [{0}] {1} (IP: {2}, MTU: {3})", nic.Name, nic.Description, nic.Ipv4Address != null ? nic.Ipv4Address.ToString() : "N/A", nic.Mtu);
+            }
 
             // QoS
             using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\QoS\" + QosPolicyName))
@@ -2411,6 +2880,8 @@ namespace RobloxNetworkTuner
             Console.WriteLine("  RobloxNetworkTuner.exe --benchmark       Run automated latency & RFC 3550 jitter diagnostic");
             Console.WriteLine("  RobloxNetworkTuner.exe --status          Inspect current kernel, NDIS, AFD, and network state");
             Console.WriteLine("  RobloxNetworkTuner.exe --restore         Restore baseline system, driver & network settings");
+            Console.WriteLine("  RobloxNetworkTuner.exe --check-update    Check GitHub releases for tuner updates");
+            Console.WriteLine("  RobloxNetworkTuner.exe --update          Automatically download and apply latest release");
             Console.WriteLine("  RobloxNetworkTuner.exe --help            Display this help screen");
             Console.WriteLine();
             Console.WriteLine("Benchmark Options:");

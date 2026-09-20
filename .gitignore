@@ -1,0 +1,22 @@
+# Executables & Compiled Binaries
+*.exe
+*.dll
+*.pkg
+*.pdb
+
+# Build output & temporary test folders
+test_*/
+bin/
+obj/
+release/
+
+# Local workspace & agent metadata
+.agents/
+.idea/
+.vscode/
+
+# Internal documentation and logs
+ORIGINAL_REQUEST.md
+TEST_INFRA.md
+TEST_READY.md
+tuner_state.json

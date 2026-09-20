@@ -1,11 +1,14 @@
 <#
 ================================================================================
  Build Script for Roblox Network Tuner & Standalone Bootstrapper Installer
+ Includes Authenticode Code-Signing Checks & SHA-256 Release Sanitization
 ================================================================================
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [switch]$SkipSigning = $false
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -22,7 +25,7 @@ Write-Host " BUILDING ROBLOX NETWORK TUNER SUITE" -ForegroundColor White
 Write-Host "================================================================================" -ForegroundColor Cyan
 
 # 1. Compile Core Tuner Engine
-Write-Host "[1/4] Compiling core engine: RobloxNetworkTuner.exe ... " -NoNewline
+Write-Host "[1/5] Compiling core engine: RobloxNetworkTuner.exe ... " -NoNewline
 $tunerOut = Join-Path $projectRoot "RobloxNetworkTuner.exe"
 $tunerManifest = Join-Path $projectRoot "app.manifest"
 $programCs = Join-Path $projectRoot "Program.cs"
@@ -36,7 +39,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "DONE" -ForegroundColor Green
 
 # 2. Compress Payload Stream (GZip to eliminate raw PE heuristic AV signatures)
-Write-Host "[2/4] Compressing payload: RobloxNetworkTuner.pkg ... " -NoNewline
+Write-Host "[2/5] Compressing payload: RobloxNetworkTuner.pkg ... " -NoNewline
 $pkgPath = Join-Path $projectRoot "RobloxNetworkTuner.pkg"
 try {
     $rawBytes = [System.IO.File]::ReadAllBytes($tunerOut)
@@ -53,7 +56,7 @@ catch {
 }
 
 # 3. Compile Bootstrapper Setup Installer
-Write-Host "[3/4] Compiling bootstrapper: RobloxNetworkTunerSetup.exe ... " -NoNewline
+Write-Host "[3/5] Compiling bootstrapper: RobloxNetworkTunerSetup.exe ... " -NoNewline
 $setupOut = Join-Path $projectRoot "RobloxNetworkTunerSetup.exe"
 $setupManifest = Join-Path $projectRoot "installer.manifest"
 $bootstrapperCs = Join-Path $projectRoot "Bootstrapper.cs"
@@ -66,9 +69,52 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "DONE" -ForegroundColor Green
 
-# 4. Deploy binaries to Desktop
-Write-Host "[4/4] Deploying binaries to Desktop ... " -NoNewline
+# 4. Authenticode Code-Signing Step
+Write-Host "[4/5] Checking Authenticode Code-Signing certificates ... " -NoNewline
+$signed = $false
+if (-not $SkipSigning) {
+    $codeSigningCert = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My -CodeSigningCert -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($codeSigningCert) {
+        try {
+            Set-AuthenticodeSignature -FilePath $tunerOut -Certificate $codeSigningCert -TimestampServer "http://timestamp.digicert.com" -HashAlgorithm SHA256 | Out-Null
+            Set-AuthenticodeSignature -FilePath $setupOut -Certificate $codeSigningCert -TimestampServer "http://timestamp.digicert.com" -HashAlgorithm SHA256 | Out-Null
+            $signed = $true
+            Write-Host "SIGNED ($($codeSigningCert.Subject))" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "WARN (Signing error: $_)" -ForegroundColor Yellow
+        }
+    }
+}
+if (-not $signed) {
+    Write-Host "SKIPPED (No Code-Signing certificate detected; binaries unsigned)" -ForegroundColor Yellow
+}
 
+# 5. Sanitize GitHub Release Assets & Generate SHA-256 Checksums
+Write-Host "[5/5] Sanitizing release directory & generating SHA-256 sums ... " -NoNewline
+$releaseDir = Join-Path $projectRoot "release"
+if (-not (Test-Path $releaseDir)) {
+    New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+}
+
+Copy-Item -Force $tunerOut (Join-Path $releaseDir "RobloxNetworkTuner.exe")
+Copy-Item -Force $setupOut (Join-Path $releaseDir "RobloxNetworkTunerSetup.exe")
+
+$tunerHash = (Get-FileHash -Path $tunerOut -Algorithm SHA256).Hash
+$setupHash = (Get-FileHash -Path $setupOut -Algorithm SHA256).Hash
+$tunerSize = (Get-Item $tunerOut).Length
+$setupSize = (Get-Item $setupOut).Length
+
+# Individual .sha256 files
+[System.IO.File]::WriteAllText((Join-Path $releaseDir "RobloxNetworkTuner.exe.sha256"), "$tunerHash`r`n")
+[System.IO.File]::WriteAllText((Join-Path $releaseDir "RobloxNetworkTunerSetup.exe.sha256"), "$setupHash`r`n")
+
+# Standard unified SHA256SUMS.txt
+$sumsManifest = "$tunerHash *RobloxNetworkTuner.exe`r`n$setupHash *RobloxNetworkTunerSetup.exe`r`n"
+[System.IO.File]::WriteAllText((Join-Path $releaseDir "SHA256SUMS.txt"), $sumsManifest)
+Write-Host "DONE" -ForegroundColor Green
+
+# Deploy binaries to Desktop locations
 $desktopPaths = @(
     [Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop),
     (Join-Path $env:USERPROFILE "OneDrive\Desktop"),
@@ -82,20 +128,16 @@ foreach ($dp in $desktopPaths) {
         Copy-Item -Force $setupOut (Join-Path $dp "RobloxNetworkTunerSetup.exe")
     }
 }
-Write-Host "DONE" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "================================================================================" -ForegroundColor Green
-Write-Host " BUILD SUCCESSFUL" -ForegroundColor Green
+Write-Host " BUILD & RELEASE SANITIZATION SUCCESSFUL" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Green
-$tunerHash = (Get-FileHash -Path $tunerOut -Algorithm SHA256).Hash
-$setupHash = (Get-FileHash -Path $setupOut -Algorithm SHA256).Hash
-$tunerSize = (Get-Item $tunerOut).Length
-$setupSize = (Get-Item $setupOut).Length
-
 Write-Host " Core Tuner Engine   : RobloxNetworkTuner.exe ($tunerSize bytes)"
 Write-Host " SHA256              : $tunerHash"
 Write-Host " Setup Bootstrapper  : RobloxNetworkTunerSetup.exe ($setupSize bytes)"
 Write-Host " SHA256              : $setupHash"
+Write-Host " Release Bundle      : $releaseDir"
+Write-Host " Checksums Manifest  : $(Join-Path $releaseDir 'SHA256SUMS.txt')"
 Write-Host " Desktop Deployments : Updated successfully across all user desktop folders"
 Write-Host "================================================================================" -ForegroundColor Green
