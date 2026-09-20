@@ -26,8 +26,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("3a4d6201-9f14-4e86-8e30-22d29cda328c")]
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
+[assembly: AssemblyVersion("2.1.0.0")]
+[assembly: AssemblyFileVersion("2.1.0.0")]
 
 namespace RobloxNetworkTuner.Setup
 {
@@ -36,7 +36,7 @@ namespace RobloxNetworkTuner.Setup
     internal static class Program
     {
         public const string AppTitle = "Roblox Network Tuner";
-        public const string AppVersion = "2.0.0";
+        public const string AppVersion = "2.1.0";
         public const string PublisherName = "Roblox Performance Engineering";
         public const string UninstallRegSubKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RobloxNetworkTuner";
         public const string QosPolicyName = "RobloxNetworkTuner_DSCP46";
@@ -1293,7 +1293,7 @@ namespace RobloxNetworkTuner.Setup
             }
             using (SolidBrush bBadgeText = new SolidBrush(colEmerald))
             {
-                string badgeStr = isUninstall ? "BASELINE RESTORE MODE" : "v2.0.0 • x64 PRODUCTION";
+                string badgeStr = isUninstall ? "BASELINE RESTORE MODE" : "v2.1.0 • x64 PRODUCTION";
                 g.DrawString(badgeStr, fontBadge, bBadgeText, rectBadge.X + 7, rectBadge.Y + 3);
             }
         }
