@@ -29,8 +29,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.7.0")]
-[assembly: AssemblyFileVersion("2.4.7.0")]
+[assembly: AssemblyVersion("2.4.8.0")]
+[assembly: AssemblyFileVersion("2.4.8.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2033,7 +2033,15 @@ namespace RobloxNetworkTuner
 
                 // If Roblox process is not running, mark disconnected
                 Process[] procs = Process.GetProcessesByName(Program.TargetProcessName);
-                if (procs.Length == 0)
+                bool hasProcs = procs != null && procs.Length > 0;
+                if (procs != null)
+                {
+                    for (int p = 0; p < procs.Length; p++)
+                    {
+                        try { procs[p].Dispose(); } catch { }
+                    }
+                }
+                if (!hasProcs)
                 {
                     if (currentSession.IsConnected)
                     {
@@ -2690,26 +2698,27 @@ namespace RobloxNetworkTuner
             CompetingTrafficSnapshot snap = new CompetingTrafficSnapshot();
             try
             {
-                Process[] procs = Process.GetProcesses();
                 HashSet<string> detected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                for (int i = 0; i < procs.Length; i++)
+                for (int j = 0; j < MonitoredProcesses.Length; j++)
                 {
                     try
                     {
-                        string pName = procs[i].ProcessName.ToLowerInvariant();
-                        for (int j = 0; j < MonitoredProcesses.Length; j++)
+                        Process[] matching = Process.GetProcessesByName(MonitoredProcesses[j]);
+                        if (matching != null && matching.Length > 0)
                         {
-                            if (pName.Contains(MonitoredProcesses[j]))
+                            string raw = MonitoredProcesses[j];
+                            string friendly = raw;
+                            if (raw.Contains("onedrive")) friendly = "OneDrive";
+                            else if (raw.Contains("steam")) friendly = "Steam";
+                            else if (raw.Contains("epic")) friendly = "Epic Games";
+                            else if (raw.Contains("torrent")) friendly = "BitTorrent";
+                            else if (raw.Contains("delivery")) friendly = "Windows Update";
+                            detected.Add(friendly);
+
+                            for (int m = 0; m < matching.Length; m++)
                             {
-                                string friendly = procs[i].ProcessName;
-                                if (pName.Contains("onedrive")) friendly = "OneDrive";
-                                else if (pName.Contains("steam")) friendly = "Steam";
-                                else if (pName.Contains("epic")) friendly = "Epic Games";
-                                else if (pName.Contains("torrent")) friendly = "BitTorrent";
-                                else if (pName.Contains("delivery")) friendly = "Windows Update";
-                                detected.Add(friendly);
-                                break;
+                                try { matching[m].Dispose(); } catch { }
                             }
                         }
                     }
@@ -2722,7 +2731,7 @@ namespace RobloxNetworkTuner
                 if (detected.Count > 0)
                 {
                     snap.HasHeavyTraffic = true;
-                    snap.StatusText = "âš ï¸ Competing Traffic: " + string.Join(", ", snap.CompetitorNames.ToArray()) + " active";
+                    snap.StatusText = "⚠ Competing Traffic: " + string.Join(", ", snap.CompetitorNames.ToArray()) + " active";
                 }
                 else
                 {
@@ -2882,7 +2891,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.7";
+        public const string CurrentVersion = "2.4.8";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo

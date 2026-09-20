@@ -169,20 +169,33 @@ namespace RobloxNetworkTuner
 
         private void ModernButton_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            DoubleAnimation press = new DoubleAnimation(0.96, new Duration(TimeSpan.FromMilliseconds(50)));
-            scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, press);
-            scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, press);
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                e.Handled = true;
+                this.CaptureMouse();
+                DoubleAnimation press = new DoubleAnimation(0.96, new Duration(TimeSpan.FromMilliseconds(50)));
+                scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, press);
+                scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, press);
+            }
         }
 
         private void ModernButton_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
-            DoubleAnimation release = new DoubleAnimation(1.0, new Duration(TimeSpan.FromMilliseconds(80)));
-            scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, release);
-            scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, release);
-
-            if (this.IsMouseOver && Click != null)
+            if (e.ChangedButton == MouseButton.Left)
             {
-                Click(this, new RoutedEventArgs());
+                e.Handled = true;
+                if (this.IsMouseCaptured)
+                {
+                    this.ReleaseMouseCapture();
+                }
+                DoubleAnimation release = new DoubleAnimation(1.0, new Duration(TimeSpan.FromMilliseconds(80)));
+                scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, release);
+                scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, release);
+
+                if (this.IsMouseOver && Click != null)
+                {
+                    Click(this, new RoutedEventArgs());
+                }
             }
         }
 
@@ -610,7 +623,7 @@ namespace RobloxNetworkTuner
 
             // Setup Timers
             telemetryTimer = new DispatcherTimer();
-            telemetryTimer.Interval = TimeSpan.FromMilliseconds(1500);
+            telemetryTimer.Interval = TimeSpan.FromMilliseconds(4000);
             telemetryTimer.Tick += TelemetryTimer_Tick;
             telemetryTimer.Start();
 
@@ -868,12 +881,19 @@ namespace RobloxNetworkTuner
             hBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(24, 32, 47));
             hBorder.BorderThickness = new Thickness(0, 0, 0, 1);
 
-            // Enable dragging window anywhere from header
+            // Enable dragging window anywhere from header EXCEPT when clicking controls
             hBorder.MouseLeftButtonDown += delegate (object sender, MouseButtonEventArgs e)
             {
                 if (e.ButtonState == MouseButtonState.Pressed)
                 {
-                    this.DragMove();
+                    DependencyObject dep = e.OriginalSource as DependencyObject;
+                    while (dep != null && dep != hBorder)
+                    {
+                        if (dep is ModernButton || dep is Button || dep is Control)
+                            return;
+                        dep = VisualTreeHelper.GetParent(dep);
+                    }
+                    try { this.DragMove(); } catch { }
                 }
             };
 
@@ -906,7 +926,7 @@ namespace RobloxNetworkTuner
 
             // Minimize Button
             ModernButton btnMin = ModernButton.CreateCaption("—", false);
-            btnMin.Click += delegate { this.WindowState = WindowState.Minimized; };
+            btnMin.Click += delegate { MinimizeToTray(); };
             rightActions.Children.Add(btnMin);
 
             // Close Button
@@ -1121,6 +1141,50 @@ namespace RobloxNetworkTuner
             card.BorderThickness = new Thickness(1);
 
             ScrollViewer scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            try
+            {
+                string scrollBarStyle = @"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type ScrollBar}'>
+                    <Setter Property='Background' Value='Transparent'/>
+                    <Setter Property='Width' Value='6'/>
+                    <Setter Property='MinWidth' Value='6'/>
+                    <Setter Property='Template'>
+                        <Setter.Value>
+                            <ControlTemplate TargetType='{x:Type ScrollBar}'>
+                                <Grid Background='Transparent'>
+                                    <Track x:Name='PART_Track' IsDirectionReversed='true'>
+                                        <Track.DecreaseRepeatButton>
+                                            <RepeatButton Command='{x:Static ScrollBar.LineUpCommand}' Opacity='0' Focusable='false'/>
+                                        </Track.DecreaseRepeatButton>
+                                        <Track.IncreaseRepeatButton>
+                                            <RepeatButton Command='{x:Static ScrollBar.LineDownCommand}' Opacity='0' Focusable='false'/>
+                                        </Track.IncreaseRepeatButton>
+                                        <Track.Thumb>
+                                            <Thumb>
+                                                <Thumb.Template>
+                                                    <ControlTemplate TargetType='{x:Type Thumb}'>
+                                                        <Border x:Name='thumbBorder' Background='#334155' CornerRadius='3' Margin='0,2,0,2'/>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property='IsMouseOver' Value='true'>
+                                                                <Setter TargetName='thumbBorder' Property='Background' Value='#10B981'/>
+                                                            </Trigger>
+                                                            <Trigger Property='IsDragging' Value='true'>
+                                                                <Setter TargetName='thumbBorder' Property='Background' Value='#059669'/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Thumb.Template>
+                                            </Thumb>
+                                        </Track.Thumb>
+                                    </Track>
+                                </Grid>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>";
+                Style customScrollStyle = (Style)System.Windows.Markup.XamlReader.Parse(scrollBarStyle);
+                scroll.Resources.Add(typeof(System.Windows.Controls.Primitives.ScrollBar), customScrollStyle);
+            }
+            catch { }
             StackPanel list = new StackPanel { Margin = new Thickness(8, 12, 8, 12) };
 
             TextBlock h = new TextBlock { Text = "KERNEL & SOCKET TUNING", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(12, 0, 0, 8) };
@@ -1507,18 +1571,40 @@ namespace RobloxNetworkTuner
 
         #region Background Timers & Telemetry
 
+        private int watchdogTickCounter = 0;
+
         private void TelemetryTimer_Tick(object sender, EventArgs e)
         {
+            bool isVisible = false;
+            try
+            {
+                this.Dispatcher.Invoke(new Action(delegate
+                {
+                    isVisible = (this.Visibility == Visibility.Visible && this.WindowState != WindowState.Minimized);
+                }));
+            }
+            catch { }
+
+            if (!isVisible) return;
+
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
                     // Check Roblox Game Session
-                    RobloxSessionInfo sess = RobloxGameSessionTracker.GetCurrentSession();
-                    if (sess != null && sess.IsConnected && !string.IsNullOrEmpty(sess.ServerIp))
+                    if (robloxRunning)
                     {
-                        liveTarget = sess.ServerIp;
-                        isLiveGameServer = true;
+                        RobloxSessionInfo sess = RobloxGameSessionTracker.GetCurrentSession();
+                        if (sess != null && sess.IsConnected && !string.IsNullOrEmpty(sess.ServerIp))
+                        {
+                            liveTarget = sess.ServerIp;
+                            isLiveGameServer = true;
+                        }
+                        else
+                        {
+                            liveTarget = "roblox.com";
+                            isLiveGameServer = false;
+                        }
                     }
                     else
                     {
@@ -1559,15 +1645,19 @@ namespace RobloxNetworkTuner
                     // Update UI via Dispatcher
                     this.Dispatcher.BeginInvoke(new Action(delegate
                     {
+                        if (this.Visibility != Visibility.Visible || this.WindowState == WindowState.Minimized) return;
+
                         txtPingVal.Text = string.Format("{0:F1} ms", liveRtt > 0 ? liveRtt : 24.2);
                         txtJitterVal.Text = string.Format("±{0:F2} ms", liveJitter > 0 ? liveJitter : 0.45);
                         txtLossVal.Text = "0.0%";
 
-                        sparkPing.UpdatePoints(rttHistory, 10, 100);
-                        sparkLoss.UpdatePoints(lossHistory, 0, 5);
-                        sparkJitter.UpdatePoints(bwHistory, 0, 5);
-
-                        if (currentTab == NavTab.Statistics)
+                        if (currentTab == NavTab.Overview)
+                        {
+                            sparkPing.UpdatePoints(rttHistory, 10, 100);
+                            sparkLoss.UpdatePoints(lossHistory, 0, 5);
+                            sparkJitter.UpdatePoints(bwHistory, 0, 5);
+                        }
+                        else if (currentTab == NavTab.Statistics)
                         {
                             txtStatRttVal.Text = txtPingVal.Text;
                             txtStatJitterVal.Text = txtJitterVal.Text;
@@ -1586,7 +1676,14 @@ namespace RobloxNetworkTuner
                 try
                 {
                     Process[] procs = Process.GetProcessesByName("RobloxPlayerBeta");
-                    bool running = procs.Length > 0;
+                    bool running = procs != null && procs.Length > 0;
+                    if (procs != null)
+                    {
+                        for (int p = 0; p < procs.Length; p++)
+                        {
+                            try { procs[p].Dispose(); } catch { }
+                        }
+                    }
 
                     if (running && !robloxRunning)
                     {
@@ -1597,6 +1694,10 @@ namespace RobloxNetworkTuner
                             Program.ApplyOptimizations();
                             isTuningApplied = true;
                         }
+                        this.Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            if (telemetryTimer != null) telemetryTimer.Interval = TimeSpan.FromMilliseconds(1500);
+                        }));
                     }
                     else if (!running && robloxRunning)
                     {
@@ -1607,16 +1708,35 @@ namespace RobloxNetworkTuner
                             Program.RestoreDefaults();
                             isTuningApplied = false;
                         }
+                        this.Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            if (telemetryTimer != null) telemetryTimer.Interval = TimeSpan.FromMilliseconds(4000);
+                        }));
                     }
 
-                    // Route hops probe periodically
-                    if (currentTab == NavTab.Statistics)
+                    watchdogTickCounter++;
+
+                    bool isVisible = false;
+                    try
+                    {
+                        this.Dispatcher.Invoke(new Action(delegate
+                        {
+                            isVisible = (this.Visibility == Visibility.Visible && this.WindowState != WindowState.Minimized);
+                        }));
+                    }
+                    catch { }
+
+                    // Route hops probe periodically only when visible and on Statistics tab
+                    if (isVisible && currentTab == NavTab.Statistics && (watchdogTickCounter % 4 == 0))
                     {
                         currentRouteHops = RouteHopMonitor.MeasureHops(liveTarget);
                     }
 
-                    // Check background traffic contention
-                    currentTraffic = BackgroundBandwidthMonitor.ScanCompetingProcesses();
+                    // Check background traffic contention every 10 seconds (every 5th tick)
+                    if (watchdogTickCounter % 5 == 0)
+                    {
+                        currentTraffic = BackgroundBandwidthMonitor.ScanCompetingProcesses();
+                    }
 
                     this.Dispatcher.BeginInvoke(new Action(delegate
                     {
@@ -1866,35 +1986,98 @@ namespace RobloxNetworkTuner
             });
         }
 
+        private bool hasShownTrayTip = false;
+
+        private void MinimizeToTray()
+        {
+            try
+            {
+                this.Hide();
+
+                // Throttle timers when hidden to save system resources
+                if (telemetryTimer != null) telemetryTimer.Interval = TimeSpan.FromMilliseconds(10000);
+                if (watchdogTimer != null) watchdogTimer.Interval = TimeSpan.FromMilliseconds(4000);
+
+                if (trayIcon != null && !hasShownTrayTip)
+                {
+                    hasShownTrayTip = true;
+                    trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Running in background. Click tray icon to open.", WinForms.ToolTipIcon.Info);
+                }
+            }
+            catch { }
+        }
+
+        private void RestoreFromTray()
+        {
+            try
+            {
+                this.Show();
+                this.WindowState = WindowState.Normal;
+                this.Activate();
+                this.Focus();
+
+                // Restore active timer intervals
+                if (telemetryTimer != null) telemetryTimer.Interval = TimeSpan.FromMilliseconds(robloxRunning ? 1500 : 4000);
+                if (watchdogTimer != null) watchdogTimer.Interval = TimeSpan.FromMilliseconds(2000);
+
+                // Immediate telemetry tick
+                ThreadPool.QueueUserWorkItem(delegate { TelemetryTimer_Tick(null, null); });
+            }
+            catch { }
+        }
+
+        protected override void OnStateChanged(EventArgs e)
+        {
+            base.OnStateChanged(e);
+            if (this.WindowState == WindowState.Minimized)
+            {
+                this.WindowState = WindowState.Normal;
+                MinimizeToTray();
+            }
+        }
+
         private void SetupSystemTray()
         {
             try
             {
                 trayIcon = new WinForms.NotifyIcon();
                 trayIcon.Text = "Roblox Network Tuner";
-                trayIcon.Visible = true;
 
+                // Extract high-res application icon from current executable
+                System.Drawing.Icon appIcon = null;
                 try
                 {
-                    string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
-                    if (System.IO.File.Exists(iconPath))
-                        trayIcon.Icon = new System.Drawing.Icon(iconPath);
-                    else
-                        trayIcon.Icon = System.Drawing.SystemIcons.Application;
+                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                    if (System.IO.File.Exists(exePath))
+                    {
+                        appIcon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+                    }
                 }
-                catch
+                catch { }
+
+                if (appIcon == null)
                 {
-                    trayIcon.Icon = System.Drawing.SystemIcons.Application;
+                    try
+                    {
+                        string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+                        if (System.IO.File.Exists(iconPath))
+                        {
+                            appIcon = new System.Drawing.Icon(iconPath);
+                        }
+                    }
+                    catch { }
                 }
+
+                // CRITICAL: Set Icon BEFORE setting Visible = true to avoid blank/invisible shell icon in Win10/11
+                trayIcon.Icon = appIcon ?? System.Drawing.SystemIcons.Application;
+                trayIcon.Visible = true;
 
                 WinForms.ContextMenuStrip menu = new WinForms.ContextMenuStrip();
                 menu.Items.Add("Open Dashboard", null, delegate
                 {
                     this.Dispatcher.BeginInvoke(new Action(delegate
                     {
-                        this.Show();
-                        this.WindowState = WindowState.Normal;
-                        this.Activate();
+                        RestoreFromTray();
                     }));
                 });
                 menu.Items.Add("Check for Updates", null, delegate { TriggerUpdateCheckAsync(true); });
@@ -1902,13 +2085,21 @@ namespace RobloxNetworkTuner
                 menu.Items.Add("Exit", null, delegate { SafeExit(); });
 
                 trayIcon.ContextMenuStrip = menu;
+                trayIcon.MouseClick += delegate (object sender, WinForms.MouseEventArgs e)
+                {
+                    if (e.Button == WinForms.MouseButtons.Left)
+                    {
+                        this.Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            RestoreFromTray();
+                        }));
+                    }
+                };
                 trayIcon.DoubleClick += delegate
                 {
                     this.Dispatcher.BeginInvoke(new Action(delegate
                     {
-                        this.Show();
-                        this.WindowState = WindowState.Normal;
-                        this.Activate();
+                        RestoreFromTray();
                     }));
                 };
             }
