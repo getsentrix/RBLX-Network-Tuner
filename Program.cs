@@ -3026,6 +3026,9 @@ try {
         private bool eeeEnabled = true;
         private bool nagleEnabled = true;
 
+        private bool isTuningInProgress = false;
+        private string tuneBtnText = "TUNE NOW";
+
         // Waveform histories for the 3 sparkline cards
         private readonly List<double> rttHistory = new List<double>();
         private readonly List<double> lossHistory = new List<double>();
@@ -3433,40 +3436,43 @@ try {
                 {
                     if (rectBtnTuneNow.Contains(e.Location))
                     {
-                        Program.ApplyAll();
-                        AdapterHealthModule.OptimizeAdapterPower(null);
-                        isTuningApplied = true;
-                        this.Invalidate();
+                        TriggerTuneNowAsync();
                         return;
                     }
                     if (rectSwitchPerf.Contains(e.Location))
                     {
                         perfModeEnabled = !perfModeEnabled;
-                        if (perfModeEnabled)
-                        {
-                            Program.ApplyAll();
-                            isTuningApplied = true;
-                        }
-                        else
-                        {
-                            Program.RestoreAll();
-                            isTuningApplied = false;
-                        }
                         this.Invalidate();
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            if (perfModeEnabled)
+                            {
+                                Program.ApplyAll();
+                                try { this.BeginInvoke((MethodInvoker)delegate { isTuningApplied = true; this.Invalidate(); }); } catch { }
+                            }
+                            else
+                            {
+                                Program.RestoreAll();
+                                try { this.BeginInvoke((MethodInvoker)delegate { isTuningApplied = false; this.Invalidate(); }); } catch { }
+                            }
+                        });
                         return;
                     }
                     if (rectSwitchWifi.Contains(e.Location))
                     {
                         wifiGuardEnabled = !wifiGuardEnabled;
-                        if (wifiGuardEnabled)
-                        {
-                            WifiOptimizationModule.Apply(Program.CurrentSnapshot);
-                        }
-                        else
-                        {
-                            WifiOptimizationModule.Restore(Program.CurrentSnapshot);
-                        }
                         this.Invalidate();
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            if (wifiGuardEnabled)
+                            {
+                                WifiOptimizationModule.Apply(Program.CurrentSnapshot);
+                            }
+                            else
+                            {
+                                WifiOptimizationModule.Restore(Program.CurrentSnapshot);
+                            }
+                        });
                         return;
                     }
                 }
@@ -3477,9 +3483,12 @@ try {
                     if (rectSwitchTimer.Contains(e.Location))
                     {
                         timerEnabled = !timerEnabled;
-                        if (timerEnabled) SchedulingModule.Apply(Program.CurrentSnapshot);
-                        else SchedulingModule.Restore(Program.CurrentSnapshot);
                         this.Invalidate();
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            if (timerEnabled) SchedulingModule.Apply(Program.CurrentSnapshot);
+                            else SchedulingModule.Restore(Program.CurrentSnapshot);
+                        });
                         return;
                     }
                     if (rectSwitchAfd.Contains(e.Location))
@@ -3503,8 +3512,11 @@ try {
                     if (rectSwitchEee.Contains(e.Location))
                     {
                         eeeEnabled = !eeeEnabled;
-                        if (eeeEnabled) AdapterHealthModule.OptimizeAdapterPower(Program.CurrentSnapshot);
                         this.Invalidate();
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            if (eeeEnabled) AdapterHealthModule.OptimizeAdapterPower(Program.CurrentSnapshot);
+                        });
                         return;
                     }
                     if (rectSwitchNagle.Contains(e.Location))
@@ -3515,18 +3527,26 @@ try {
                     }
                     if (rectBtnReapply.Contains(e.Location))
                     {
-                        Program.ApplyAll();
-                        AdapterHealthModule.OptimizeAdapterPower(null);
-                        isTuningApplied = true;
-                        this.Invalidate();
+                        TriggerTuneNowAsync();
                         return;
                     }
                     if (rectBtnRestore.Contains(e.Location))
                     {
-                        Program.RestoreAll();
-                        isTuningApplied = false;
-                        this.Invalidate();
-                        MessageBox.Show(this, "Windows network defaults and baseline settings have been fully restored.", "Defaults Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            Program.RestoreAll();
+                            try
+                            {
+                                this.BeginInvoke((MethodInvoker)delegate
+                                {
+                                    isTuningApplied = false;
+                                    tuneBtnText = "TUNE NOW";
+                                    this.Invalidate();
+                                    MessageBox.Show(this, "Windows network defaults and baseline settings have been fully restored.", "Defaults Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                });
+                            }
+                            catch { }
+                        });
                         return;
                     }
                     if (rectBtnQuickBufferbloat.Contains(e.Location))
@@ -3657,6 +3677,47 @@ try {
 
             this.Cursor = isHand ? Cursors.Hand : Cursors.Default;
             if (redraw) this.Invalidate();
+        }
+
+        private void TriggerTuneNowAsync()
+        {
+            if (isTuningInProgress) return;
+            isTuningInProgress = true;
+            tuneBtnText = "TUNING...";
+            this.Invalidate();
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    Program.ApplyAll();
+                    AdapterHealthModule.OptimizeAdapterPower(Program.CurrentSnapshot);
+                }
+                catch { }
+
+                try
+                {
+                    this.BeginInvoke((MethodInvoker)delegate
+                    {
+                        isTuningInProgress = false;
+                        isTuningApplied = true;
+                        tuneBtnText = "TUNED ✓";
+                        this.Invalidate();
+
+                        System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+                        t.Interval = 2000;
+                        t.Tick += delegate
+                        {
+                            t.Stop();
+                            t.Dispose();
+                            tuneBtnText = "TUNE NOW";
+                            this.Invalidate();
+                        };
+                        t.Start();
+                    });
+                }
+                catch { }
+            });
         }
 
         private void RunBufferbloatTestAsync()
@@ -3952,7 +4013,7 @@ try {
             }
 
             // Right: TUNE NOW Gradient Button
-            DrawGradientButton(g, rectBtnTuneNow, "TUNE NOW", hoverBtnTuneNow);
+            DrawGradientButton(g, rectBtnTuneNow, tuneBtnText, hoverBtnTuneNow && !isTuningInProgress);
 
             // Row 3: Active Profiles Card (Y: 300, H: 194)
             Rectangle rectProfiles = new Rectangle(216, 300, 648, 194);
@@ -4403,8 +4464,27 @@ try {
 
         private static void DrawGradientButton(Graphics g, Rectangle r, string text, bool hover)
         {
-            Color c1 = hover ? Color.FromArgb(52, 211, 153) : Color.FromArgb(16, 185, 129);
-            Color c2 = hover ? Color.FromArgb(34, 211, 238) : Color.FromArgb(6, 182, 212);
+            Color c1, c2;
+            Color textCol = Color.FromArgb(6, 24, 18);
+
+            if (text.StartsWith("TUNING"))
+            {
+                c1 = Color.FromArgb(13, 148, 136);
+                c2 = Color.FromArgb(14, 116, 144);
+                textCol = Color.White;
+            }
+            else if (text.StartsWith("TUNED"))
+            {
+                c1 = Color.FromArgb(5, 150, 105);
+                c2 = Color.FromArgb(16, 185, 129);
+                textCol = Color.White;
+            }
+            else
+            {
+                c1 = hover ? Color.FromArgb(52, 211, 153) : Color.FromArgb(16, 185, 129);
+                c2 = hover ? Color.FromArgb(34, 211, 238) : Color.FromArgb(6, 182, 212);
+                textCol = Color.FromArgb(6, 24, 18);
+            }
 
             using (GraphicsPath path = CreateRoundedRect(r, 6))
             {
@@ -4419,7 +4499,7 @@ try {
             }
 
             using (Font f = new Font("Segoe UI", 9.5f, FontStyle.Bold))
-            using (Brush bText = new SolidBrush(Color.FromArgb(6, 24, 18)))
+            using (Brush bText = new SolidBrush(textCol))
             {
                 SizeF sz = g.MeasureString(text, f);
                 float tx = r.X + (r.Width - sz.Width) / 2.0f;
@@ -5043,8 +5123,13 @@ try {
 
         internal static class SystemRestoreModule
         {
+            private static bool hasAttemptedRestorePoint = false;
+
             public static void CreateRestorePoint(string description)
             {
+                if (hasAttemptedRestorePoint) return;
+                hasAttemptedRestorePoint = true;
+
                 Console.Write(" [*] Creating Windows System Restore checkpoint ........................ ");
                 try
                 {
@@ -5067,7 +5152,7 @@ try {
                     {
                         if (p != null)
                         {
-                            bool finished = p.WaitForExit(10000);
+                            bool finished = p.WaitForExit(2500);
                             if (finished && p.ExitCode == 0)
                             {
                                 Program.PrintSuccess("CREATED");
