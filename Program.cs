@@ -2639,6 +2639,7 @@ namespace RobloxNetworkTuner
         {
             string currentExe = Process.GetCurrentProcess().MainModule.FileName;
             string tempDownload = Path.Combine(Path.GetTempPath(), "RobloxNetworkTuner_update.exe");
+            string scriptPath = Path.Combine(Path.GetTempPath(), "rblx_handoff_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".ps1");
 
             try
             {
@@ -2659,7 +2660,7 @@ namespace RobloxNetworkTuner
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                 using (WebClient wc = new WebClient())
                 {
-                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
+                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.3");
                     wc.DownloadFile(rel.ExeDownloadUrl, tempDownload);
                 }
 
@@ -2677,7 +2678,7 @@ namespace RobloxNetworkTuner
                     string manifestText = null;
                     using (WebClient wcSums = new WebClient())
                     {
-                        wcSums.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
+                        wcSums.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.3");
                         manifestText = wcSums.DownloadString(manifestUrl);
                     }
 
@@ -2701,7 +2702,7 @@ namespace RobloxNetworkTuner
                 }
                 catch { }
 
-                if (statusCallback != null) statusCallback("Update downloaded (" + (fi.Length / 1024) + " KB, SHA-256 verified). Restarting...");
+                if (statusCallback != null) statusCallback("Update downloaded (" + (fi.Length / 1024) + " KB, verified). Restarting...");
                 else Program.PrintSuccess(string.Format("DONE ({0:N0} bytes, SHA-256 verified)", fi.Length));
 
                 // 1. Safely restore network and system settings before exiting
@@ -2711,7 +2712,7 @@ namespace RobloxNetworkTuner
                 // 2. Also update setup binary in the installation folder if it exists
                 string currentDir = Path.GetDirectoryName(currentExe);
                 string setupInDir = Path.Combine(currentDir, "RobloxNetworkTunerSetup.exe");
-                string setupScriptPart = "";
+                string tempSetup = "";
                 if (File.Exists(setupInDir))
                 {
                     if (string.IsNullOrEmpty(rel.SetupDownloadUrl))
@@ -2720,17 +2721,13 @@ namespace RobloxNetworkTuner
                         rel.SetupDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTunerSetup.exe", repo, rel.TagName);
                     }
 
-                    string tempSetup = Path.Combine(Path.GetTempPath(), "RobloxNetworkTunerSetup_update.exe");
+                    tempSetup = Path.Combine(Path.GetTempPath(), "RobloxNetworkTunerSetup_update.exe");
                     try
                     {
                         using (WebClient wcSetup = new WebClient())
                         {
-                            wcSetup.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
+                            wcSetup.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.3");
                             wcSetup.DownloadFile(rel.SetupDownloadUrl, tempSetup);
-                        }
-                        if (File.Exists(tempSetup) && new FileInfo(tempSetup).Length > 20000)
-                        {
-                            setupScriptPart = string.Format("Copy-Item -Force -Path '{0}' -Destination '{1}'; Remove-Item -Force -Path '{0}' -ErrorAction SilentlyContinue; ", tempSetup, setupInDir);
                         }
                     }
                     catch { }
@@ -2749,27 +2746,71 @@ namespace RobloxNetworkTuner
                 }
                 catch { }
 
-                // 4. Detached PowerShell script:
-                // Waits for current process to exit, copies the new exe over the current exe, and restarts it
-                string handoffScript = string.Format(
-                    "$ErrorActionPreference = 'Stop'; " +
-                    "Wait-Process -Id {0}; " +
-                    "Start-Sleep -Milliseconds 500; " +
-                    "Copy-Item -Force -Path '{1}' -Destination '{2}'; " +
-                    "Remove-Item -Force -Path '{1}' -ErrorAction SilentlyContinue; " +
-                    "{3}" +
-                    "Start-Process -FilePath '{2}'",
-                    Process.GetCurrentProcess().Id,
-                    tempDownload,
-                    currentExe,
-                    setupScriptPart);
+                // 4. Detached PowerShell handoff script via robust external .ps1 file
+                // Eliminates quote escaping bugs and retries up to 30 times (15s) to guarantee file lock release
+                StringBuilder ps = new StringBuilder();
+                ps.AppendLine("$ErrorActionPreference = 'Continue'");
+                ps.AppendLine(string.Format("$parentPid = {0}", Process.GetCurrentProcess().Id));
+                ps.AppendLine(string.Format("$tempExe = '{0}'", tempDownload.Replace("'", "''")));
+                ps.AppendLine(string.Format("$destExe = '{0}'", currentExe.Replace("'", "''")));
+                ps.AppendLine(string.Format("$tempSetup = '{0}'", tempSetup.Replace("'", "''")));
+                ps.AppendLine(string.Format("$destSetup = '{0}'", setupInDir.Replace("'", "''")));
+                ps.AppendLine(@"
+# Wait for parent PID to exit without crashing if already exited
+try {
+    $proc = Get-Process -Id $parentPid -ErrorAction SilentlyContinue
+    if ($proc) {
+        $proc.WaitForExit(15000)
+    }
+} catch {}
+
+Start-Sleep -Milliseconds 600
+
+# Retry loop (up to 30 attempts, 500ms intervals) to wait for file locks to release
+$copied = $false
+for ($i = 0; $i -lt 30; $i++) {
+    try {
+        Copy-Item -Force -Path $tempExe -Destination $destExe -ErrorAction Stop
+        $copied = $true
+        break
+    } catch {
+        Start-Sleep -Milliseconds 500
+    }
+}
+
+if ($copied) {
+    Remove-Item -Force -Path $tempExe -ErrorAction SilentlyContinue
+    if ($tempSetup -ne '' -and $destSetup -ne '' -and (Test-Path $tempSetup)) {
+        try {
+            Copy-Item -Force -Path $tempSetup -Destination $destSetup -ErrorAction SilentlyContinue
+            Remove-Item -Force -Path $tempSetup -ErrorAction SilentlyContinue
+        } catch {}
+    }
+    try {
+        Start-Process -FilePath $destExe -Verb RunAs
+    } catch {
+        Start-Process -FilePath $destExe
+    }
+}
+
+# Self clean-up
+try {
+    $myPath = $MyInvocation.MyCommand.Path
+    if ($myPath -and (Test-Path $myPath)) {
+        Remove-Item -Force -Path $myPath -ErrorAction SilentlyContinue
+    }
+} catch {}
+");
+
+                File.WriteAllText(scriptPath, ps.ToString(), Encoding.UTF8);
 
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -WindowStyle Hidden -Command \"" + handoffScript + "\"",
+                    Arguments = string.Format("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{0}\"", scriptPath),
                     CreateNoWindow = true,
-                    UseShellExecute = false
+                    UseShellExecute = true,
+                    Verb = "runas"
                 };
                 Process.Start(psi);
 
@@ -2790,6 +2831,7 @@ namespace RobloxNetworkTuner
             {
                 if (statusCallback != null) statusCallback("Update failed: " + ex.Message);
                 else Program.PrintError("FAIL: " + ex.Message);
+                try { if (File.Exists(scriptPath)) File.Delete(scriptPath); } catch { }
                 return false;
             }
         }
@@ -2853,68 +2895,87 @@ namespace RobloxNetworkTuner
 
         public static ReleaseInfo FetchLatestRelease()
         {
+            string repo = GetRepoName();
+            ReleaseInfo info = new ReleaseInfo();
+
+            // Strategy 1: GitHub API
             try
             {
-                string repo = GetRepoName();
                 string apiUrl = string.Format("https://api.github.com/repos/{0}/releases/latest", repo);
-
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                 string json;
                 using (WebClient wc = new WebClient())
                 {
-                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.2");
+                    wc.Headers.Add("User-Agent", "RobloxNetworkTuner-Updater/2.3");
                     wc.Headers.Add("Accept", "application/vnd.github.v3+json");
                     json = wc.DownloadString(apiUrl);
                 }
 
-                if (string.IsNullOrEmpty(json)) return null;
-
-                ReleaseInfo info = new ReleaseInfo();
-                Match tagMatch = Regex.Match(json, @"""tag_name""\s*:\s*""([^""]+)""");
-                if (tagMatch.Success)
+                if (!string.IsNullOrEmpty(json))
                 {
-                    info.TagName = tagMatch.Groups[1].Value.Trim();
-                    info.ReleaseVersion = ParseVersionSafe(info.TagName);
-                }
-
-                Match nameMatch = Regex.Match(json, @"""name""\s*:\s*""([^""]+)""");
-                if (nameMatch.Success)
-                {
-                    info.ReleaseNotes = nameMatch.Groups[1].Value;
-                }
-
-                // Match specific asset URLs
-                MatchCollection assetMatches = Regex.Matches(json, @"\{[^{}]*""name""\s*:\s*""([^""]+)""[^{}]*""browser_download_url""\s*:\s*""([^""]+)""[^{}]*\}");
-                foreach (Match m in assetMatches)
-                {
-                    string name = m.Groups[1].Value;
-                    string url = m.Groups[2].Value;
-                    if (string.Equals(name, "RobloxNetworkTuner.exe", StringComparison.OrdinalIgnoreCase))
+                    Match tagMatch = Regex.Match(json, @"""tag_name""\s*:\s*""([^""]+)""");
+                    if (tagMatch.Success)
                     {
-                        info.ExeDownloadUrl = url;
+                        info.TagName = tagMatch.Groups[1].Value.Trim();
+                        info.ReleaseVersion = ParseVersionSafe(info.TagName);
                     }
-                    else if (string.Equals(name, "RobloxNetworkTunerSetup.exe", StringComparison.OrdinalIgnoreCase))
+
+                    Match nameMatch = Regex.Match(json, @"""name""\s*:\s*""([^""]+)""");
+                    if (nameMatch.Success)
                     {
-                        info.SetupDownloadUrl = url;
+                        info.ReleaseNotes = nameMatch.Groups[1].Value;
+                    }
+
+                    Match exeMatch = Regex.Match(json, @"""browser_download_url""\s*:\s*""([^""]+RobloxNetworkTuner\.exe)""");
+                    if (exeMatch.Success) info.ExeDownloadUrl = exeMatch.Groups[1].Value;
+
+                    Match setupMatch = Regex.Match(json, @"""browser_download_url""\s*:\s*""([^""]+RobloxNetworkTunerSetup\.exe)""");
+                    if (setupMatch.Success) info.SetupDownloadUrl = setupMatch.Groups[1].Value;
+
+                    if (!string.IsNullOrEmpty(info.TagName) && info.ReleaseVersion > new Version(0, 0, 0, 0))
+                    {
+                        if (string.IsNullOrEmpty(info.ExeDownloadUrl))
+                            info.ExeDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTuner.exe", repo, info.TagName);
+                        if (string.IsNullOrEmpty(info.SetupDownloadUrl))
+                            info.SetupDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTunerSetup.exe", repo, info.TagName);
+                        return info;
                     }
                 }
-
-                // Fallbacks if assets array was omitted or formatted differently
-                if (string.IsNullOrEmpty(info.ExeDownloadUrl) && !string.IsNullOrEmpty(info.TagName))
-                {
-                    info.ExeDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTuner.exe", repo, info.TagName);
-                }
-                if (string.IsNullOrEmpty(info.SetupDownloadUrl) && !string.IsNullOrEmpty(info.TagName))
-                {
-                    info.SetupDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTunerSetup.exe", repo, info.TagName);
-                }
-
-                return info;
             }
-            catch
+            catch { }
+
+            // Strategy 2: Web Redirect Fallback (Bypasses GitHub API rate limits completely)
+            try
             {
-                return null;
+                string webUrl = string.Format("https://github.com/{0}/releases/latest", repo);
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(webUrl);
+                req.AllowAutoRedirect = false;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+                req.Timeout = 8000;
+
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                {
+                    string location = resp.Headers["Location"];
+                    if (!string.IsNullOrEmpty(location))
+                    {
+                        int slashIdx = location.LastIndexOf('/');
+                        if (slashIdx >= 0 && slashIdx < location.Length - 1)
+                        {
+                            string tag = location.Substring(slashIdx + 1).Trim();
+                            info.TagName = tag;
+                            info.ReleaseVersion = ParseVersionSafe(tag);
+                            info.ReleaseNotes = "Roblox Network Tuner " + tag;
+                            info.ExeDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTuner.exe", repo, tag);
+                            info.SetupDownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/RobloxNetworkTunerSetup.exe", repo, tag);
+                            return info;
+                        }
+                    }
+                }
             }
+            catch { }
+
+            return null;
         }
     }
 
@@ -3074,7 +3135,8 @@ namespace RobloxNetworkTuner
                                 {
                                     this.isUpdateAvailable = true;
                                     this.latestRelease = rel;
-                                    this.Invalidate(rectBtnVersion);
+                                    this.bufferbloatStatus = "Update Available: " + rel.TagName + " (Click 'UPDATE' above to apply)";
+                                    this.Invalidate();
                                     if (this.trayIcon != null && this.trayIcon.Visible)
                                     {
                                         this.trayIcon.ShowBalloonTip(4000, "Update Available", "Roblox Network Tuner " + rel.TagName + " is available! Click to update.", ToolTipIcon.Info);
