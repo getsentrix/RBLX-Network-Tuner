@@ -19,6 +19,69 @@ namespace RobloxNetworkTuner
 {
     #region Custom Hardware-Accelerated WPF Controls
 
+    internal static class WpfAnimationHelper
+    {
+        public static void AnimateBorderBackground(Border border, Color targetColor, int durationMs = 120)
+        {
+            if (border == null) return;
+            try
+            {
+                SolidColorBrush scb = border.Background as SolidColorBrush;
+                if (scb == null || scb.IsFrozen)
+                {
+                    scb = new SolidColorBrush(scb != null ? scb.Color : Colors.Transparent);
+                    border.Background = scb;
+                }
+                ColorAnimation anim = new ColorAnimation(targetColor, new Duration(TimeSpan.FromMilliseconds(durationMs)));
+                scb.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+            }
+            catch
+            {
+                try { border.Background = new SolidColorBrush(targetColor); } catch { }
+            }
+        }
+
+        public static void AnimateBorderBrush(Border border, Color targetColor, int durationMs = 120)
+        {
+            if (border == null) return;
+            try
+            {
+                SolidColorBrush scb = border.BorderBrush as SolidColorBrush;
+                if (scb == null || scb.IsFrozen)
+                {
+                    scb = new SolidColorBrush(scb != null ? scb.Color : Colors.Transparent);
+                    border.BorderBrush = scb;
+                }
+                ColorAnimation anim = new ColorAnimation(targetColor, new Duration(TimeSpan.FromMilliseconds(durationMs)));
+                scb.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+            }
+            catch
+            {
+                try { border.BorderBrush = new SolidColorBrush(targetColor); } catch { }
+            }
+        }
+
+        public static void AnimateTextForeground(TextBlock tb, Color targetColor, int durationMs = 120)
+        {
+            if (tb == null) return;
+            try
+            {
+                SolidColorBrush scb = tb.Foreground as SolidColorBrush;
+                if (scb == null || scb.IsFrozen)
+                {
+                    scb = new SolidColorBrush(scb != null ? scb.Color : Colors.White);
+                    tb.Foreground = scb;
+                }
+                ColorAnimation anim = new ColorAnimation(targetColor, new Duration(TimeSpan.FromMilliseconds(durationMs)));
+                scb.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+            }
+            catch
+            {
+                try { tb.Foreground = new SolidColorBrush(targetColor); } catch { }
+            }
+        }
+    }
+
     /// <summary>
     /// Fully custom hardware-accelerated button that completely bypasses Windows Aero theme.
     /// Provides smooth 120ms hover animations, tactile click scaling, and customizable borders.
@@ -79,29 +142,13 @@ namespace RobloxNetworkTuner
             if (isGradient)
             {
                 rootBorder.Background = hoverGrad;
-                if (rootBorder.BorderBrush is SolidColorBrush)
-                {
-                    ColorAnimation borderAnim = new ColorAnimation(hoverBorder, new Duration(TimeSpan.FromMilliseconds(120)));
-                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
-                }
+                WpfAnimationHelper.AnimateBorderBrush(rootBorder, hoverBorder, 120);
             }
             else
             {
-                if (rootBorder.Background is SolidColorBrush)
-                {
-                    ColorAnimation bgAnim = new ColorAnimation(hoverBg, new Duration(TimeSpan.FromMilliseconds(120)));
-                    rootBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, bgAnim);
-                }
-                if (rootBorder.BorderBrush is SolidColorBrush)
-                {
-                    ColorAnimation borderAnim = new ColorAnimation(hoverBorder, new Duration(TimeSpan.FromMilliseconds(120)));
-                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
-                }
-                if (textBlock.Foreground is SolidColorBrush)
-                {
-                    ColorAnimation fgAnim = new ColorAnimation(hoverFg, new Duration(TimeSpan.FromMilliseconds(120)));
-                    textBlock.Foreground.BeginAnimation(SolidColorBrush.ColorProperty, fgAnim);
-                }
+                WpfAnimationHelper.AnimateBorderBackground(rootBorder, hoverBg, 120);
+                WpfAnimationHelper.AnimateBorderBrush(rootBorder, hoverBorder, 120);
+                WpfAnimationHelper.AnimateTextForeground(textBlock, hoverFg, 120);
             }
         }
 
@@ -110,29 +157,13 @@ namespace RobloxNetworkTuner
             if (isGradient)
             {
                 rootBorder.Background = normalGrad;
-                if (rootBorder.BorderBrush is SolidColorBrush)
-                {
-                    ColorAnimation borderAnim = new ColorAnimation(normalBorder, new Duration(TimeSpan.FromMilliseconds(120)));
-                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
-                }
+                WpfAnimationHelper.AnimateBorderBrush(rootBorder, normalBorder, 120);
             }
             else
             {
-                if (rootBorder.Background is SolidColorBrush)
-                {
-                    ColorAnimation bgAnim = new ColorAnimation(normalBg, new Duration(TimeSpan.FromMilliseconds(120)));
-                    rootBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, bgAnim);
-                }
-                if (rootBorder.BorderBrush is SolidColorBrush)
-                {
-                    ColorAnimation borderAnim = new ColorAnimation(normalBorder, new Duration(TimeSpan.FromMilliseconds(120)));
-                    rootBorder.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
-                }
-                if (textBlock.Foreground is SolidColorBrush)
-                {
-                    ColorAnimation fgAnim = new ColorAnimation(normalFg, new Duration(TimeSpan.FromMilliseconds(120)));
-                    textBlock.Foreground.BeginAnimation(SolidColorBrush.ColorProperty, fgAnim);
-                }
+                WpfAnimationHelper.AnimateBorderBackground(rootBorder, normalBg, 120);
+                WpfAnimationHelper.AnimateBorderBrush(rootBorder, normalBorder, 120);
+                WpfAnimationHelper.AnimateTextForeground(textBlock, normalFg, 120);
             }
         }
 
@@ -176,7 +207,7 @@ namespace RobloxNetworkTuner
             btn.textBlock.Text = text;
             btn.textBlock.FontSize = 12.5;
             btn.textBlock.FontWeight = FontWeights.Bold;
-            btn.textBlock.Foreground = Brushes.White;
+            btn.textBlock.Foreground = new SolidColorBrush(Colors.White);
 
             return btn;
         }
@@ -311,7 +342,7 @@ namespace RobloxNetworkTuner
             thumb = new Ellipse();
             thumb.Width = 16;
             thumb.Height = 16;
-            thumb.Fill = Brushes.White;
+            thumb.Fill = new SolidColorBrush(Colors.White);
             thumb.HorizontalAlignment = HorizontalAlignment.Left;
             thumb.VerticalAlignment = VerticalAlignment.Center;
             thumb.Margin = new Thickness(3.5, 0, 0, 0);
@@ -331,15 +362,13 @@ namespace RobloxNetworkTuner
             this.MouseEnter += delegate
             {
                 Color hBorder = isChecked ? Color.FromRgb(110, 231, 183) : Color.FromRgb(71, 85, 105);
-                ColorAnimation cAnim = new ColorAnimation(hBorder, new Duration(TimeSpan.FromMilliseconds(120)));
-                track.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, cAnim);
+                WpfAnimationHelper.AnimateBorderBrush(track, hBorder, 120);
             };
 
             this.MouseLeave += delegate
             {
                 Color nBorder = isChecked ? Color.FromRgb(52, 211, 153) : Color.FromRgb(51, 65, 85);
-                ColorAnimation cAnim = new ColorAnimation(nBorder, new Duration(TimeSpan.FromMilliseconds(120)));
-                track.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, cAnim);
+                WpfAnimationHelper.AnimateBorderBrush(track, nBorder, 120);
             };
         }
 
@@ -354,11 +383,8 @@ namespace RobloxNetworkTuner
             Color toBg = isChecked ? Color.FromRgb(16, 185, 129) : Color.FromRgb(30, 41, 59);
             Color toBorder = isChecked ? Color.FromRgb(52, 211, 153) : Color.FromRgb(51, 65, 85);
 
-            ColorAnimation bgAnim = new ColorAnimation(toBg, new Duration(TimeSpan.FromMilliseconds(150)));
-            ColorAnimation borderAnim = new ColorAnimation(toBorder, new Duration(TimeSpan.FromMilliseconds(150)));
-
-            track.Background.BeginAnimation(SolidColorBrush.ColorProperty, bgAnim);
-            track.BorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderAnim);
+            WpfAnimationHelper.AnimateBorderBackground(track, toBg, 150);
+            WpfAnimationHelper.AnimateBorderBrush(track, toBorder, 150);
         }
     }
 
@@ -571,7 +597,7 @@ namespace RobloxNetworkTuner
             this.Height = 560;
             this.WindowStyle = WindowStyle.None;
             this.AllowsTransparency = true;
-            this.Background = Brushes.Transparent;
+            this.Background = new SolidColorBrush(Colors.Transparent);
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             this.ResizeMode = ResizeMode.NoResize;
 
@@ -794,7 +820,7 @@ namespace RobloxNetworkTuner
             btn.Height = 42;
             btn.CornerRadius = new CornerRadius(8);
             btn.Margin = new Thickness(0, 3, 0, 3);
-            btn.Background = (tab == currentTab) ? new SolidColorBrush(Color.FromRgb(19, 27, 42)) : Brushes.Transparent;
+            btn.Background = (tab == currentTab) ? new SolidColorBrush(Color.FromRgb(19, 27, 42)) : new SolidColorBrush(Colors.Transparent);
             btn.Cursor = Cursors.Hand;
 
             TextBlock tb = new TextBlock();
@@ -813,16 +839,14 @@ namespace RobloxNetworkTuner
             {
                 if (currentTab != tab)
                 {
-                    ColorAnimation ca = new ColorAnimation(Color.FromRgb(17, 24, 39), new Duration(TimeSpan.FromMilliseconds(120)));
-                    btn.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+                    WpfAnimationHelper.AnimateBorderBackground(btn, Color.FromRgb(17, 24, 39), 120);
                 }
             };
             btn.MouseLeave += delegate
             {
                 if (currentTab != tab)
                 {
-                    ColorAnimation ca = new ColorAnimation(Colors.Transparent, new Duration(TimeSpan.FromMilliseconds(120)));
-                    btn.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+                    WpfAnimationHelper.AnimateBorderBackground(btn, Colors.Transparent, 120);
                 }
             };
 
@@ -960,7 +984,7 @@ namespace RobloxNetworkTuner
             Grid.SetColumn(statTxtStack, 1);
             statTxtStack.VerticalAlignment = VerticalAlignment.Center;
 
-            txtOptTitle = new TextBlock { Text = "Optimized Successfully", FontSize = 15, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
+            txtOptTitle = new TextBlock { Text = "Optimized Successfully", FontSize = 15, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White) };
             statTxtStack.Children.Add(txtOptTitle);
 
             txtOptSub = new TextBlock { Text = "0.50ms timer • NDIS fast-path • EcoQoS disabled", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 2, 0, 3) };
@@ -1066,7 +1090,7 @@ namespace RobloxNetworkTuner
 
             StackPanel sp = new StackPanel();
             sp.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
+            TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White) };
             TextBlock s = new TextBlock { Text = subtitle, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 1, 0, 0) };
             sp.Children.Add(t);
             sp.Children.Add(s);
@@ -1169,7 +1193,7 @@ namespace RobloxNetworkTuner
             rowBorder.CornerRadius = new CornerRadius(8);
             rowBorder.Margin = new Thickness(0, 2, 0, 2);
             rowBorder.Padding = new Thickness(12, 7, 12, 7);
-            rowBorder.Background = Brushes.Transparent;
+            rowBorder.Background = new SolidColorBrush(Colors.Transparent);
 
             Grid row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1177,7 +1201,7 @@ namespace RobloxNetworkTuner
 
             StackPanel sp = new StackPanel();
             sp.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
+            TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White) };
             TextBlock s = new TextBlock { Text = subtitle, FontSize = 9.5, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 1, 0, 0) };
             sp.Children.Add(t);
             sp.Children.Add(s);
@@ -1192,13 +1216,11 @@ namespace RobloxNetworkTuner
 
             rowBorder.MouseEnter += delegate
             {
-                ColorAnimation ca = new ColorAnimation(Color.FromRgb(18, 24, 36), new Duration(TimeSpan.FromMilliseconds(120)));
-                rowBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+                WpfAnimationHelper.AnimateBorderBackground(rowBorder, Color.FromRgb(18, 24, 36), 120);
             };
             rowBorder.MouseLeave += delegate
             {
-                ColorAnimation ca = new ColorAnimation(Colors.Transparent, new Duration(TimeSpan.FromMilliseconds(120)));
-                rowBorder.Background.BeginAnimation(SolidColorBrush.ColorProperty, ca);
+                WpfAnimationHelper.AnimateBorderBackground(rowBorder, Colors.Transparent, 120);
             };
 
             return rowBorder;
@@ -1294,7 +1316,7 @@ namespace RobloxNetworkTuner
             StackPanel bbTxt = new StackPanel();
             bbTxt.VerticalAlignment = VerticalAlignment.Center;
             TextBlock bbHead = new TextBlock { Text = "BUFFERBLOAT DIAGNOSTIC", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) };
-            txtStatBufferbloat = new TextBlock { Text = bufferbloatResultText, FontSize = 11.5, Foreground = Brushes.White, Margin = new Thickness(0, 4, 0, 0) };
+            txtStatBufferbloat = new TextBlock { Text = bufferbloatResultText, FontSize = 11.5, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 4, 0, 0) };
             bbTxt.Children.Add(bbHead);
             bbTxt.Children.Add(txtStatBufferbloat);
             bbg.Children.Add(bbTxt);
@@ -1352,7 +1374,7 @@ namespace RobloxNetworkTuner
 
             StackPanel aboutStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
             aboutStack.Children.Add(new TextBlock { Text = "ABOUT", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
-            aboutStack.Children.Add(new TextBlock { Text = "Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 1) });
+            aboutStack.Children.Add(new TextBlock { Text = "Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 3, 0, 1) });
             aboutStack.Children.Add(new TextBlock { Text = "Low-latency network and scheduler optimization for competitive Roblox gameplay.", FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) });
 
             ModernButton btnGh = ModernButton.CreateAction("Open GitHub Repository", Color.FromRgb(56, 189, 248), 34);
@@ -1377,7 +1399,7 @@ namespace RobloxNetworkTuner
 
             StackPanel upStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
             upStack.Children.Add(new TextBlock { Text = "AUTO-UPDATE ENGINE", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
-            txtUpdateInfo = new TextBlock { Text = "Automatic GitHub releases check active.", FontSize = 11, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 8) };
+            txtUpdateInfo = new TextBlock { Text = "Automatic GitHub releases check active.", FontSize = 11, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 3, 0, 8) };
             upStack.Children.Add(txtUpdateInfo);
 
             btnCheckUpdate = ModernButton.CreateAction("Check for Updates", Color.FromRgb(52, 211, 153), 34);
@@ -1441,7 +1463,7 @@ namespace RobloxNetworkTuner
             for (int i = 0; i < sidebarButtons.Count; i++)
             {
                 bool isSelected = (i == (int)targetTab);
-                sidebarButtons[i].Background = isSelected ? new SolidColorBrush(Color.FromRgb(19, 27, 42)) : Brushes.Transparent;
+                sidebarButtons[i].Background = isSelected ? new SolidColorBrush(Color.FromRgb(19, 27, 42)) : new SolidColorBrush(Colors.Transparent);
                 sidebarLabels[i].FontWeight = isSelected ? FontWeights.Bold : FontWeights.Normal;
                 sidebarLabels[i].Foreground = new SolidColorBrush(isSelected ? Colors.White : Color.FromRgb(148, 163, 184));
             }

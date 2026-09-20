@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.5.0")]
-[assembly: AssemblyFileVersion("2.4.5.0")]
+[assembly: AssemblyVersion("2.4.6.0")]
+[assembly: AssemblyFileVersion("2.4.6.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2881,7 +2881,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.5";
+        public const string CurrentVersion = "2.4.6";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -3551,6 +3551,16 @@ try {
                 }
 
                 System.Windows.Application app = new System.Windows.Application();
+                app.DispatcherUnhandledException += delegate(object s, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs exArgs)
+                {
+                    try
+                    {
+                        string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash.log");
+                        File.AppendAllText(logPath, DateTime.UtcNow.ToString("o") + "\n" + exArgs.Exception.ToString() + "\n\n");
+                    }
+                    catch { }
+                    exArgs.Handled = true;
+                };
                 app.Run(new TunerWpfWindow());
             }
         }
