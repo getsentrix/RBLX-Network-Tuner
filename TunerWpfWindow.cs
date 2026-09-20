@@ -722,22 +722,93 @@ namespace RobloxNetworkTuner
             brandStack.VerticalAlignment = VerticalAlignment.Center;
             brandStack.Margin = new Thickness(20, 0, 0, 0);
 
-            Border avatar = new Border();
+            // Animated Brand Icon (Neon Hexagon + Lightning Bolt)
+            Grid avatar = new Grid();
             avatar.Width = 38;
             avatar.Height = 38;
-            avatar.CornerRadius = new CornerRadius(9);
-            avatar.Background = new SolidColorBrush(Color.FromRgb(10, 30, 36));
-            avatar.BorderBrush = new SolidColorBrush(Color.FromRgb(6, 182, 212));
-            avatar.BorderThickness = new Thickness(1.2);
+            avatar.VerticalAlignment = VerticalAlignment.Center;
+            avatar.HorizontalAlignment = HorizontalAlignment.Center;
+            avatar.Cursor = Cursors.Hand;
 
-            TextBlock txtAv = new TextBlock();
-            txtAv.Text = "GS";
-            txtAv.FontWeight = FontWeights.Bold;
-            txtAv.FontSize = 13;
-            txtAv.Foreground = new SolidColorBrush(Color.FromRgb(34, 211, 238));
-            txtAv.HorizontalAlignment = HorizontalAlignment.Center;
-            txtAv.VerticalAlignment = VerticalAlignment.Center;
-            avatar.Child = txtAv;
+            Viewbox iconBox = new Viewbox();
+            iconBox.Width = 36;
+            iconBox.Height = 36;
+            iconBox.Stretch = Stretch.Uniform;
+
+            Canvas iconCanvas = new Canvas();
+            iconCanvas.Width = 32;
+            iconCanvas.Height = 32;
+
+            // 1. Outer Hexagon Badge
+            System.Windows.Shapes.Path hexPath = new System.Windows.Shapes.Path();
+            hexPath.Data = Geometry.Parse("M 16,2 L 28,8.9 L 28,23.1 L 16,30 L 4,23.1 L 4,8.9 Z");
+            hexPath.Fill = new SolidColorBrush(Color.FromRgb(10, 19, 31));
+            LinearGradientBrush hexStroke = new LinearGradientBrush();
+            hexStroke.StartPoint = new Point(0, 0);
+            hexStroke.EndPoint = new Point(1, 1);
+            hexStroke.GradientStops.Add(new GradientStop(Color.FromRgb(0, 240, 255), 0.0));
+            hexStroke.GradientStops.Add(new GradientStop(Color.FromRgb(16, 185, 129), 1.0));
+            hexPath.Stroke = hexStroke;
+            hexPath.StrokeThickness = 2.0;
+
+            // 2. Center Lightning Bolt
+            System.Windows.Shapes.Path boltPath = new System.Windows.Shapes.Path();
+            boltPath.Data = Geometry.Parse("M 17.5,5.5 L 10,16 L 16,16 L 14,26.5 L 22,13.5 L 16,13.5 Z");
+            LinearGradientBrush boltFill = new LinearGradientBrush();
+            boltFill.StartPoint = new Point(0, 0);
+            boltFill.EndPoint = new Point(1, 1);
+            boltFill.GradientStops.Add(new GradientStop(Color.FromRgb(0, 240, 255), 0.0));
+            boltFill.GradientStops.Add(new GradientStop(Color.FromRgb(52, 211, 153), 1.0));
+            boltPath.Fill = boltFill;
+
+            // 3. Core Energy Center Dot
+            Ellipse coreDot = new Ellipse();
+            coreDot.Width = 3.0;
+            coreDot.Height = 3.0;
+            Canvas.SetLeft(coreDot, 14.5);
+            Canvas.SetTop(coreDot, 13.5);
+            coreDot.Fill = new SolidColorBrush(Colors.White);
+            coreDot.Opacity = 0.95;
+
+            iconCanvas.Children.Add(hexPath);
+            iconCanvas.Children.Add(boltPath);
+            iconCanvas.Children.Add(coreDot);
+            iconBox.Child = iconCanvas;
+
+            // 4. Glowing DropShadow Effect
+            DropShadowEffect iconGlow = new DropShadowEffect();
+            iconGlow.Color = Color.FromRgb(0, 240, 255);
+            iconGlow.Direction = 0;
+            iconGlow.ShadowDepth = 0;
+            iconGlow.BlurRadius = 10;
+            iconGlow.Opacity = 0.75;
+            iconBox.Effect = iconGlow;
+
+            // 5. Breathing Scale Transform
+            ScaleTransform iconScale = new ScaleTransform(1.0, 1.0, 18, 18);
+            iconBox.RenderTransform = iconScale;
+
+            // 6. Hardware-Accelerated Looping Breathing Animations
+            DoubleAnimation glowAnim = new DoubleAnimation(0.40, 0.95, new Duration(TimeSpan.FromMilliseconds(1800)));
+            glowAnim.AutoReverse = true;
+            glowAnim.RepeatBehavior = RepeatBehavior.Forever;
+            glowAnim.EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut };
+            iconGlow.BeginAnimation(DropShadowEffect.OpacityProperty, glowAnim);
+
+            DoubleAnimation blurAnim = new DoubleAnimation(6.0, 14.0, new Duration(TimeSpan.FromMilliseconds(1800)));
+            blurAnim.AutoReverse = true;
+            blurAnim.RepeatBehavior = RepeatBehavior.Forever;
+            blurAnim.EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut };
+            iconGlow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, blurAnim);
+
+            DoubleAnimation scaleAnim = new DoubleAnimation(0.96, 1.04, new Duration(TimeSpan.FromMilliseconds(1800)));
+            scaleAnim.AutoReverse = true;
+            scaleAnim.RepeatBehavior = RepeatBehavior.Forever;
+            scaleAnim.EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut };
+            iconScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
+            iconScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim);
+
+            avatar.Children.Add(iconBox);
             brandStack.Children.Add(avatar);
 
             StackPanel titleStack = new StackPanel();

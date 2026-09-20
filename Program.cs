@@ -29,8 +29,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.8.0")]
-[assembly: AssemblyFileVersion("2.4.8.0")]
+[assembly: AssemblyVersion("2.4.9.0")]
+[assembly: AssemblyFileVersion("2.4.9.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2891,7 +2891,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.8";
+        public const string CurrentVersion = "2.4.9";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo

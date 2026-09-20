@@ -144,13 +144,16 @@ body {
 .brand-icon {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
-  border: 1px solid rgba(16, 185, 129, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
+  filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.5));
+  transition: var(--transition);
+}
+
+.brand:hover .brand-icon {
+  filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.85)) drop-shadow(0 0 6px rgba(16, 185, 129, 0.9));
+  transform: scale(1.08);
 }
 
 .brand-pill {

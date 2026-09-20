@@ -43,16 +43,28 @@
       <nav class="nav">
         <a href="#" class="brand">
           <div class="brand-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="brandHexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#00F0FF" />
+                  <stop offset="100%" stop-color="#10B981" />
+                </linearGradient>
+                <linearGradient id="brandBoltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#00F0FF" />
+                  <stop offset="100%" stop-color="#34D399" />
+                </linearGradient>
+              </defs>
+              <polygon points="16,2 28,8.9 28,23.1 16,30 4,23.1 4,8.9" fill="#0A131F" stroke="url(#brandHexGrad)" stroke-width="2.2" stroke-linejoin="round" />
+              <polygon points="17.5,5.5 10,16 16,16 14,26.5 22,13.5 16,13.5" fill="url(#brandBoltGrad)" />
+              <circle cx="16" cy="15" r="1.4" fill="#FFFFFF" opacity="0.95" />
             </svg>
           </div>
           <span>Roblox Network Tuner</span>
-          <span class="brand-pill live-release-tag">v2.4.8</span>
+          <span class="brand-pill live-release-tag">v2.4.9</span>
         </a>
 
         <ul class="nav-links">
-          <li><a href="#features" class="nav-link">Pillars</a></li>
+          <li><a href="#features" class="nav-link">Features</a></li>
           <li><a href="#simulator" class="nav-link">Simulator</a></li>
           <li><a href="#architecture" class="nav-link">Comparison</a></li>
           <li><a href="#cli" class="nav-link">CLI</a></li>
@@ -67,7 +79,7 @@
             GitHub
           </a>
           <a href="#downloads" class="btn btn-primary btn-sm">
-            Get v2.4.8
+            Get v2.4.9
           </a>
         </div>
       </nav>
@@ -79,15 +91,15 @@
     <div class="container">
       <div class="hero-pill">
         <span class="status-dot"></span>
-        <span>Version 2.4.8 Live • Zero-Install Standalone & Installer • Open Source</span>
+        <span>Version 2.4.9 Live • Zero-Install Standalone & Installer • Open Source</span>
       </div>
 
       <h1 class="hero-title">
-        Low-Latency <span class="gradient-text">Roblox Network</span> Engine
+        Stop Roblox Lag &amp; <span class="gradient-text">Ping Spikes</span>
       </h1>
 
       <p class="hero-desc">
-        Adaptive Windows network stack optimization, real-time Roblox game server telemetry, and evidence-based bufferbloat diagnosis. Verified atomic rollback when you close Roblox.
+        Tired of sudden rubberbanding and delayed hit registration? Roblox Network Tuner automatically tunes your Windows network settings while you play, and restores everything the second you close the game.
       </p>
 
       <div class="hero-cta">
@@ -109,19 +121,19 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          <span>0.50ms Timer Dispatch</span>
+          <span>0.50ms Kernel Scheduler</span>
         </div>
         <div class="hero-stat-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          <span>Zero Memory Injection</span>
+          <span>Zero Game Memory Tampering</span>
         </div>
         <div class="hero-stat-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          <span>100% Reversible Rollback</span>
+          <span>100% Automatic Rollback</span>
         </div>
       </div>
 
@@ -137,7 +149,7 @@
             </svg>
           </div>
           <div>
-            <div class="badge-label">Active Server RTT</div>
+            <div class="badge-label">Active Server Ping</div>
             <div class="badge-val" id="heroPingVal">18.6 ms</div>
           </div>
         </div>
@@ -150,7 +162,7 @@
             </svg>
           </div>
           <div>
-            <div class="badge-label">RFC 3550 Jitter</div>
+            <div class="badge-label">Connection Jitter</div>
             <div class="badge-val" id="heroJitterVal">±0.38 ms</div>
           </div>
         </div>
@@ -163,7 +175,7 @@
               <div class="mockup-dot yellow"></div>
               <div class="mockup-dot green"></div>
             </div>
-            <div class="mockup-tag">Roblox Network Tuner v2.4.8 • Active Session Telemetry</div>
+            <div class="mockup-tag">Roblox Network Tuner v2.4.9 • Active Session Telemetry</div>
             <div style="width: 48px;"></div>
           </div>
           <img src="assets/preview.png" alt="Roblox Network Tuner Dashboard Preview" class="mockup-img" loading="eager">
@@ -176,10 +188,10 @@
   <section class="section" id="simulator">
     <div class="container">
       <div class="section-header">
-        <span class="section-tag">Interactive Diagnostic Sandbox</span>
-        <h2 class="section-title">Experience the Low-Latency Difference</h2>
+        <span class="section-tag">Live Simulator</span>
+        <h2 class="section-title">See The Difference In Real-Time</h2>
         <p class="section-desc">
-          Test and compare real-world network latency behavior under load. See how Windows stock buffering compares against the tuned adaptive stack.
+          Compare how stock Windows handles network load versus Roblox Network Tuner. Notice how tuning prevents sudden Wi-Fi lag spikes and stabilizes game ping.
         </p>
       </div>
 
@@ -198,7 +210,7 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
-            Run Bufferbloat Test
+            Run Network Stress Test
           </button>
         </div>
 
@@ -206,23 +218,23 @@
           <!-- Readout Metrics -->
           <div class="sim-readout">
             <div class="sim-readout-row">
-              <span class="sim-readout-label">Baseline Idle Latency (RTT)</span>
+              <span class="sim-readout-label">Baseline Idle Ping</span>
               <span class="sim-readout-val" id="simIdleRtt">34.2 ms</span>
             </div>
             <div class="sim-readout-row">
-              <span class="sim-readout-label">Loaded Network Burst Latency</span>
+              <span class="sim-readout-label">Ping Under Heavy Load</span>
               <span class="sim-readout-val" id="simLoadedRtt">36.8 ms</span>
             </div>
             <div class="sim-readout-row">
-              <span class="sim-readout-label">Bufferbloat Latency Delta (ΔRTT)</span>
+              <span class="sim-readout-label">Ping Increase (Bufferbloat)</span>
               <span class="sim-readout-val" id="simDelta" style="color: #34d399;">+2.6 ms</span>
             </div>
             <div class="sim-readout-row">
-              <span class="sim-readout-label">RFC 3550 Interarrival Jitter</span>
+              <span class="sim-readout-label">Connection Jitter</span>
               <span class="sim-readout-val" id="simJitter" style="color: #38bdf8;">±0.65 ms</span>
             </div>
             <div class="sim-readout-row">
-              <span class="sim-readout-label">Network Pacing Grade</span>
+              <span class="sim-readout-label">Stability Grade</span>
               <span class="sim-grade-pill" id="simGrade">[ A+ ]</span>
             </div>
           </div>
@@ -260,14 +272,14 @@
     </div>
   </section>
 
-  <!-- The 6 Core Engineering Pillars -->
+  <!-- Key Features Section -->
   <section class="section" id="features">
     <div class="container">
       <div class="section-header">
-        <span class="section-tag">System Architecture</span>
-        <h2 class="section-title">The 6 Core Engineering Pillars</h2>
+        <span class="section-tag">Key Features</span>
+        <h2 class="section-title">How It Keeps Your Game Smooth</h2>
         <p class="section-desc">
-          Engineered for raw competitive performance. No snake oil, no vague tweaks — just measurable, evidence-based systems engineering.
+          Everything you need for low ping, zero lag spikes, and smooth gameplay—applied automatically while you play.
         </p>
       </div>
 
@@ -282,11 +294,11 @@
               <line x1="12" y1="20" x2="12.01" y2="20"></line>
             </svg>
           </div>
-          <h3 class="pillar-title">Adaptive Profile & Power Steering</h3>
+          <h3 class="pillar-title">Wi-Fi &amp; Ethernet Lag Shield</h3>
           <p class="pillar-desc">
-            Automatically distinguishes Wi-Fi vs. Ethernet. Bypasses wireless scanning on wired connections and temporarily disables Energy Efficient Ethernet (EEE) to eliminate physical interface sleep latency.
+            Automatically freezes background Wi-Fi network scans that cause sudden 200ms lag spikes while you're in a match. On wired Ethernet, it prevents adapter power-saving delay.
           </p>
-          <span class="pillar-tag">NetworkProfileDetector.cs</span>
+          <span class="pillar-tag">Lag Spike Shield</span>
         </div>
 
         <!-- 2 -->
@@ -298,14 +310,29 @@
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Hop-by-Hop Route Diagnostics</h3>
+          <h3 class="pillar-title">Live Server Route Tracker</h3>
           <p class="pillar-desc">
-            Non-locking parser tails live Roblox client logs to identify active game server IPs. Concurrently probes Gateway, ISP Edge, and Game Server hops to pinpoint the exact source of any latency spike.
+            Detects your active Roblox server and monitors every step of your connection—your home router, your internet provider, and the game server—so you know exactly what is causing lag.
           </p>
-          <span class="pillar-tag">RouteHopMonitor.cs</span>
+          <span class="pillar-tag">Live Telemetry</span>
         </div>
 
         <!-- 3 -->
+        <div class="pillar-card">
+          <div class="pillar-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </div>
+          <h3 class="pillar-title">0.50ms High-Precision Timer</h3>
+          <p class="pillar-desc">
+            Replaces Windows' slow 15.6ms clock cycle with an ultra-responsive 0.50ms precision rate, cutting packet processing delays for instant hit registration and character movement.
+          </p>
+          <span class="pillar-tag">Instant Response</span>
+        </div>
+
+        <!-- 4 -->
         <div class="pillar-card">
           <div class="pillar-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -314,42 +341,25 @@
               <path d="M6 20v-6"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Bufferbloat & Contention Engine</h3>
+          <h3 class="pillar-title">Bufferbloat &amp; Bandwidth Guard</h3>
           <p class="pillar-desc">
-            Evaluates baseline idle RTT vs. loaded RTT during a 5MB burst with A+ to F grading, while an active watchdog monitors competing background hogs (OneDrive, Steam, Epic, Torrents).
+            Detects when your connection gets choked under load and flags background apps (like Steam, OneDrive, or updates) that are stealing your bandwidth while gaming.
           </p>
-          <span class="pillar-tag">BufferbloatDiagnosticModule.cs</span>
-        </div>
-
-        <!-- 4 -->
-        <div class="pillar-card">
-          <div class="pillar-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-              <line x1="6" y1="6" x2="6.01" y2="6"></line>
-              <line x1="6" y1="18" x2="6.01" y2="18"></line>
-            </svg>
-          </div>
-          <h3 class="pillar-title">Multi-Stream Bufferbloat Engine</h3>
-          <p class="pillar-desc">
-            Tests idle baseline vs. sustained load contention to both your local gateway and game target. Computes queue delay deltas, identifies bufferbloat location, and provides clear router SQM guidance.
-          </p>
-          <span class="pillar-tag">BufferbloatDiagnosticModule.cs</span>
+          <span class="pillar-tag">Anti-Congestion</span>
         </div>
 
         <!-- 5 -->
         <div class="pillar-card">
           <div class="pillar-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
           </div>
-          <h3 class="pillar-title">Audited QoS & UDP Fast Path</h3>
+          <h3 class="pillar-title">Direct UDP Game Fast-Path</h3>
           <p class="pillar-desc">
-            Applies DSCP 46 Expedited Forwarding to Roblox UDP packets with automated baseline pre/post degradation audits, paired with Winsock AFD 1500-byte datagram buffer thresholds.
+            Optimizes Windows network queues specifically for Roblox's multiplayer protocol, routing game packets through the fastest path with high-priority gaming tags.
           </p>
-          <span class="pillar-tag">QosVerificationModule.cs</span>
+          <span class="pillar-tag">Fast-Path UDP</span>
         </div>
 
         <!-- 6 -->
@@ -362,24 +372,24 @@
               <path d="M8 16H3v5"></path>
             </svg>
           </div>
-          <h3 class="pillar-title">Atomic Baseline Snapshot & Rollback</h3>
+          <h3 class="pillar-title">100% Automatic Restore</h3>
           <p class="pillar-desc">
-            Backs up your initial system state to atomic <code style="color: #a7f3d0;">tuner_state.json</code> before modifying any parameters. Automatically restores your exact baseline when closed or recovering from a reboot.
+            Takes a snapshot of your network settings before tuning. The instant you close Roblox or exit the tuner, every single setting is immediately restored to your original defaults.
           </p>
-          <span class="pillar-tag">CrashRecoveryModule.cs</span>
+          <span class="pillar-tag">Zero Permanent Changes</span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Technical Comparison Table -->
+  <!-- Side-by-Side Comparison Table -->
   <section class="section" id="architecture">
     <div class="container">
       <div class="section-header">
-        <span class="section-tag">Direct Technical Audit</span>
-        <h2 class="section-title">Stock Windows vs. Roblox Network Tuner</h2>
+        <span class="section-tag">Side-by-Side Comparison</span>
+        <h2 class="section-title">Default Windows vs. Tuned for Roblox</h2>
         <p class="section-desc">
-          Compare the default Windows gaming network stack with the optimizations applied while Roblox is running.
+          See how your network behaves out of the box compared to when Roblox Network Tuner is active.
         </p>
       </div>
 
@@ -388,51 +398,51 @@
           <table class="comp-table">
             <thead>
               <tr>
-                <th>Subsystem / Parameter</th>
-                <th>Stock Windows Default</th>
-                <th>Roblox Network Tuner</th>
+                <th>Feature / Setting</th>
+                <th>Default Windows</th>
+                <th>With Roblox Network Tuner</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td class="comp-feature">Kernel Multimedia Timer Resolution</td>
-                <td class="comp-stock">15.625 ms (Power-saving lazy quantum)</td>
-                <td class="comp-tuned">0.500 ms (NtSetTimerResolution dispatch request)</td>
+                <td class="comp-feature">System Timer Precision</td>
+                <td class="comp-stock">15.6ms (Slow power-saving clock)</td>
+                <td class="comp-tuned">0.50ms (Ultra-responsive precision scheduling)</td>
               </tr>
               <tr>
-                <td class="comp-feature">Hop-by-Hop Route Bottleneck Isolation</td>
-                <td class="comp-stock">Blind to gateway vs. ISP vs. server lag</td>
-                <td class="comp-tuned">Real-time probe (Gateway ──▶ ISP Edge ──▶ Roblox)</td>
+                <td class="comp-feature">Lag Source Detection</td>
+                <td class="comp-stock">Blind to router vs. ISP vs. game server lag</td>
+                <td class="comp-tuned">Live route hops (Router ──▶ ISP ──▶ Roblox Server)</td>
               </tr>
               <tr>
-                <td class="comp-feature">Wi-Fi Background Network Scanning</td>
-                <td class="comp-stock">Runs every 60s (causes 100–300ms spikes)</td>
-                <td class="comp-tuned">Suppressed during play with multi-factor roaming guard</td>
+                <td class="comp-feature">Wi-Fi Background Scanning</td>
+                <td class="comp-stock">Scans every 60s (causes sudden 200ms lag spikes)</td>
+                <td class="comp-tuned">Paused during matches to prevent ping spikes</td>
               </tr>
               <tr>
-                <td class="comp-feature">Winsock AFD UDP Datagram Threshold</td>
-                <td class="comp-stock">Dynamic intermediate kernel copy buffering</td>
-                <td class="comp-tuned">FastSend / FastCopy at 1500 bytes (MTU threshold)</td>
+                <td class="comp-feature">Multiplayer Packet Queues</td>
+                <td class="comp-stock">Standard system buffering queues</td>
+                <td class="comp-tuned">Direct fast-path delivery for game packets</td>
               </tr>
               <tr>
-                <td class="comp-feature">Windows 11 EcoQoS & Adapter Sleep</td>
-                <td class="comp-stock">Roblox throttled to E-cores; EEE sleeps PHY</td>
-                <td class="comp-tuned">EcoQoS disabled; EEE sleep wake-latency prevented</td>
+                <td class="comp-feature">Network Card Power Saving</td>
+                <td class="comp-stock">Adapter sleeps and delays incoming data</td>
+                <td class="comp-tuned">Stays fully awake with zero sleep latency</td>
               </tr>
               <tr>
-                <td class="comp-feature">TCP Asset Pacing & UDP Fast Path</td>
-                <td class="comp-stock">Standard delayed ACK on TCP asset streams; kernel copy on UDP</td>
-                <td class="comp-tuned">TCPNoDelay for asset streams; AFD 1500B fast datagram path</td>
+                <td class="comp-feature">Asset &amp; Texture Downloads</td>
+                <td class="comp-stock">Standard delayed packet confirmations</td>
+                <td class="comp-tuned">Instant packet dispatch for faster world loading</td>
               </tr>
               <tr>
-                <td class="comp-feature">QoS Packet Tagging</td>
-                <td class="comp-stock">Best Effort (DSCP 0 unprioritized)</td>
-                <td class="comp-tuned">DSCP 46 Expedited Forwarding with dynamic degradation rollback</td>
+                <td class="comp-feature">Game Traffic Priority</td>
+                <td class="comp-stock">Treated the same as background web traffic</td>
+                <td class="comp-tuned">Tagged with high-priority gaming delivery (DSCP 46)</td>
               </tr>
               <tr>
-                <td class="comp-feature">Restoration & Persistence</td>
-                <td class="comp-stock">Permanent manual tweaks risk network stability</td>
-                <td class="comp-tuned">Atomic baseline snapshot & verified clean rollback</td>
+                <td class="comp-feature">System Safety &amp; Restoring</td>
+                <td class="comp-stock">Permanent tweaks risk breaking your connection</td>
+                <td class="comp-tuned">100% automatic restore to your original defaults on exit</td>
               </tr>
             </tbody>
           </table>
@@ -445,10 +455,10 @@
   <section class="section" id="cli">
     <div class="container">
       <div class="section-header">
-        <span class="section-tag">Automation & Scripting</span>
-        <h2 class="section-title">Headless Command Line Suite</h2>
+        <span class="section-tag">Command Line</span>
+        <h2 class="section-title">Built-In Command Line Tools</h2>
         <p class="section-desc">
-          Run diagnostics, audit system restoration, or check for updates directly from PowerShell or Command Prompt.
+          Prefer using PowerShell or Command Prompt? Run diagnostics, check your connection, or test restoration with simple flags.
         </p>
       </div>
 
@@ -469,7 +479,7 @@
               <span class="cli-prompt">PS&gt;</span>
               <span class="cli-cmd">.\RobloxNetworkTuner.exe</span>
             </div>
-            <span class="cli-comment"># Launches the sleek dark GUI dashboard (default)</span>
+            <span class="cli-comment"># Opens the sleek desktop app (default)</span>
           </div>
 
           <div class="cli-row">
@@ -478,7 +488,7 @@
               <span class="cli-cmd">.\RobloxNetworkTuner.exe --bufferbloat</span>
             </div>
             <div>
-              <span class="cli-comment"># Evaluates loaded vs. idle bufferbloat</span>
+              <span class="cli-comment"># Runs a quick bufferbloat &amp; connection health test</span>
               <button class="cli-copy-btn" data-copy=".\RobloxNetworkTuner.exe --bufferbloat">Copy</button>
             </div>
           </div>
@@ -489,7 +499,7 @@
               <span class="cli-cmd">.\RobloxNetworkTuner.exe --status</span>
             </div>
             <div>
-              <span class="cli-comment"># Audits current Wi-Fi/Ethernet & session states</span>
+              <span class="cli-comment"># Shows active network adapter and tuning status</span>
               <button class="cli-copy-btn" data-copy=".\RobloxNetworkTuner.exe --status">Copy</button>
             </div>
           </div>
@@ -500,7 +510,7 @@
               <span class="cli-cmd">.\RobloxNetworkTuner.exe --verify-restore</span>
             </div>
             <div>
-              <span class="cli-comment"># Confirms 100% restoration to stock Windows</span>
+              <span class="cli-comment"># Verifies all settings are restored to Windows defaults</span>
               <button class="cli-copy-btn" data-copy=".\RobloxNetworkTuner.exe --verify-restore">Copy</button>
             </div>
           </div>
@@ -511,7 +521,7 @@
               <span class="cli-cmd">.\RobloxNetworkTuner.exe --check-update</span>
             </div>
             <div>
-              <span class="cli-comment"># Queries GitHub releases for newer versions</span>
+              <span class="cli-comment"># Checks if a newer version is available</span>
               <button class="cli-copy-btn" data-copy=".\RobloxNetworkTuner.exe --check-update">Copy</button>
             </div>
           </div>
@@ -522,7 +532,7 @@
               <span class="cli-cmd">.\RobloxNetworkTuner.exe --update</span>
             </div>
             <div>
-              <span class="cli-comment"># In-place background download & seamless handoff</span>
+              <span class="cli-comment"># Downloads and applies latest update automatically</span>
               <button class="cli-copy-btn" data-copy=".\RobloxNetworkTuner.exe --update">Copy</button>
             </div>
           </div>
@@ -556,16 +566,16 @@
             <div class="checksum-box">
               <div class="checksum-header">
                 <span>SHA-256 Verification Hash</span>
-                <button class="copy-hash-btn" data-copy="EE061230C5D88CD692A77784F6038825777FF34A2CB56BEC353EE69B65AAFB63">Copy Hash</button>
+                <button class="copy-hash-btn" data-copy="54BB263D178B63E0087729BB22D17BC854F020B3A0491605DDFB17ABE7BD865D">Copy Hash</button>
               </div>
               <div class="checksum-val">
-                <span>EE061230C5D88CD692A77784F6038825777FF34A2CB56BEC353EE69B65AAFB63</span>
+                <span>54BB263D178B63E0087729BB22D17BC854F020B3A0491605DDFB17ABE7BD865D</span>
               </div>
             </div>
           </div>
 
           <div>
-            <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/download/v2.4.8/RobloxNetworkTunerSetup.exe" class="btn btn-primary" style="width: 100%;">
+            <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/download/v2.4.9/RobloxNetworkTunerSetup.exe" class="btn btn-primary" style="width: 100%;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -588,22 +598,22 @@
             <div class="checksum-box">
               <div class="checksum-header">
                 <span>SHA-256 Verification Hash</span>
-                <button class="copy-hash-btn" data-copy="8318FE906D951D7EC3255EBEBA8B876A135120DE39B97A687F25EBA917B669FB">Copy Hash</button>
+                <button class="copy-hash-btn" data-copy="6DC2C946E41A7E3ED3DC1AC0BCAC9009AA2560A062D66A5735B99C6E6E745D46">Copy Hash</button>
               </div>
               <div class="checksum-val">
-                <span>8318FE906D951D7EC3255EBEBA8B876A135120DE39B97A687F25EBA917B669FB</span>
+                <span>6DC2C946E41A7E3ED3DC1AC0BCAC9009AA2560A062D66A5735B99C6E6E745D46</span>
               </div>
             </div>
           </div>
 
           <div>
-            <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/download/v2.4.8/RobloxNetworkTuner.exe" class="btn btn-secondary" style="width: 100%;">
+            <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/download/v2.4.9/RobloxNetworkTuner.exe" class="btn btn-secondary" style="width: 100%;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Download Portable (170 KB)
+              Download Portable (187 KB)
             </a>
           </div>
         </div>
