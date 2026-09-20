@@ -67,7 +67,7 @@ $setupOut = Join-Path $projectRoot "RobloxNetworkTunerSetup.exe"
 $setupManifest = Join-Path $projectRoot "installer.manifest"
 $bootstrapperCs = Join-Path $projectRoot "Bootstrapper.cs"
 
-& $csc /target:exe /out:$setupOut $iconArgs /win32manifest:$setupManifest /res:"$pkgPath",RobloxNetworkTuner.pkg /optimize+ /platform:x64 $bootstrapperCs | Out-Null
+& $csc /target:winexe /out:$setupOut $iconArgs /win32manifest:$setupManifest /res:"$pkgPath",RobloxNetworkTuner.pkg /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 $bootstrapperCs | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAILED" -ForegroundColor Red
@@ -120,21 +120,6 @@ $sumsManifest = "$tunerHash *RobloxNetworkTuner.exe`r`n$setupHash *RobloxNetwork
 [System.IO.File]::WriteAllText((Join-Path $releaseDir "SHA256SUMS.txt"), $sumsManifest)
 Write-Host "DONE" -ForegroundColor Green
 
-# Deploy binaries to Desktop locations
-$desktopPaths = @(
-    [Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop),
-    (Join-Path $env:USERPROFILE "OneDrive\Desktop"),
-    (Join-Path $env:USERPROFILE "OneDrive\Everything\Desktop"),
-    "C:\Users\dylan\Desktop"
-) | Select-Object -Unique
-
-foreach ($dp in $desktopPaths) {
-    if ($dp -and (Test-Path $dp)) {
-        Copy-Item -Force $tunerOut (Join-Path $dp "RobloxNetworkTuner.exe")
-        Copy-Item -Force $setupOut (Join-Path $dp "RobloxNetworkTunerSetup.exe")
-    }
-}
-
 Write-Host ""
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host " BUILD & RELEASE SANITIZATION SUCCESSFUL" -ForegroundColor Green
@@ -145,5 +130,4 @@ Write-Host " Setup Bootstrapper  : RobloxNetworkTunerSetup.exe ($setupSize bytes
 Write-Host " SHA256              : $setupHash"
 Write-Host " Release Bundle      : $releaseDir"
 Write-Host " Checksums Manifest  : $(Join-Path $releaseDir 'SHA256SUMS.txt')"
-Write-Host " Desktop Deployments : Updated successfully across all user desktop folders"
 Write-Host "================================================================================" -ForegroundColor Green
