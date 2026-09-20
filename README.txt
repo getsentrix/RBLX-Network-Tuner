@@ -1,37 +1,52 @@
 ================================================================================
-ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE
+ROBLOX NETWORK TUNER [x64] - QUICK START GUIDE (v2.2.0)
 ================================================================================
 
-Roblox Network Tuner is a dedicated low-latency optimization tool
-engineered for Roblox on Windows 10 and Windows 11.
+Roblox Network Tuner is an evidence-based, adaptive low-latency optimization
+and diagnostic engine engineered for Roblox on Windows 10 and Windows 11.
 
-FEATURES:
-- AFD Fast-Path: Locks Winsock datagram buffers to bypass socket queuing delays.
-- Global 0.50 ms Timer: Sets NT kernel hardware interrupt timer to 0.50 ms (2000 Hz).
-- Priority & Power Boost: Runs RobloxPlayerBeta.exe with HIGH_PRIORITY_CLASS,
-  High I/O priority, and explicitly bypasses Windows 11 EcoQoS / Power Throttling.
-- QoS DSCP 46 Tagging: Tags outgoing packets with Expedited Forwarding priority.
-- Wi-Fi Scan Freeze: Locks WLAN radio to prevent 60-second background scan spikes.
-- Nagle Disablement: Eliminates delayed ACKs and packet coalescing.
-- Automated Jitter Benchmark: Measures packet pacing and jitter variance (RFC 3550).
+CORE CAPABILITIES & PILLARS:
+- Adaptive Profile Tuning: Detects Wi-Fi vs. Ethernet. Ethernet connections
+  skip wireless commands and receive low-latency NDIS queue steering.
+- Real Roblox Server Telemetry: Tails active client transport logs in real time
+  to ping the exact connected game server (UDMUX/RCC) rather than web endpoints.
+- Bufferbloat Diagnostic Engine: Measures idle vs. loaded RTT under a 5MB network
+  burst, assigns grades A+ to F, and diagnoses router queuebloat (SQM / CAKE).
+- Signal-Aware Wi-Fi Optimization: Monitors RSSI and link quality. Skips roaming
+  scan suppression if signal drops below 55% (-75 dBm) to prevent dropouts.
+- Evidence-Based QoS Verification: Verifies DSCP 46 Expedited Forwarding against
+  ISP deprioritization or packet loss; reverts automatically if degraded.
+- Crash-Resilient Architecture: Detects orphaned session states on startup and
+  reverts to stock defaults. Includes --verify-restore audit command.
+- AFD Fast-Path & 0.50 ms Timer: Locks Winsock datagram buffers to bypass socket
+  queuing delays and tightens NT kernel timer to 0.50 ms (2000 Hz).
+- Priority & Power Boost: High process priority, High I/O priority, and
+  explicit bypass of Windows 11 EcoQoS / Power Throttling.
 
 HOW TO USE:
 1. Launch "Roblox Network Tuner" from your Start Menu or Desktop.
 2. Accept the Windows UAC elevation prompt (Administrator privileges required).
-3. The engine activates optimizations and waits for RobloxPlayerBeta.exe.
-4. When you finish playing, press [Space], [Q], [Esc], or simply close Roblox.
-   Settings automatically revert to Windows defaults when Roblox closes.
+3. The engine activates adaptive optimizations and monitors for Roblox.
+4. Join any Roblox game: the tuner tracks your real game server in real time.
+5. When you close Roblox or click [Reset & Exit], all system settings revert
+   to Windows defaults with 100% fidelity.
 
 COMMAND LINE OPTIONS:
-  RobloxNetworkTuner.exe              Launch graphical dashboard
-  RobloxNetworkTuner.exe --status     Display current network and adapter state
-  RobloxNetworkTuner.exe --benchmark  Run RFC 3550 latency and jitter test
-  RobloxNetworkTuner.exe --restore    Restore default Windows network settings
-  RobloxNetworkTuner.exe --help       Show usage options
+  RobloxNetworkTuner.exe                   Launch graphical dashboard
+  RobloxNetworkTuner.exe --status          Display network, adapter, and session state
+  RobloxNetworkTuner.exe --benchmark       Run RFC 3550 latency and jitter test
+  RobloxNetworkTuner.exe --bufferbloat     Run loaded vs idle bufferbloat diagnostic
+  RobloxNetworkTuner.exe --verify-restore  Audit and verify all settings match stock defaults
+  RobloxNetworkTuner.exe --restore         Restore default Windows network settings
+  RobloxNetworkTuner.exe --check-update    Check for updates on GitHub
+  RobloxNetworkTuner.exe --update          Download and apply latest update
+  RobloxNetworkTuner.exe --help            Show usage options
 
 EMERGENCY RESET:
-If your computer abruptly shut down while running, launch "Reset Network Settings" from
-the Start Menu, or run "Restore-Stock.bat" in the installation directory.
+If your computer abruptly crashed or lost power during a session, simply launch
+Roblox Network Tuner or run:
+  RobloxNetworkTuner.exe --restore
+The engine automatically detects and recovers orphaned configurations.
 
 UNINSTALLATION:
 Uninstall via Windows Settings -> Apps -> Installed Apps -> Roblox Network Tuner.

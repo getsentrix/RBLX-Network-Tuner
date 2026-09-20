@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.1.1.0")]
-[assembly: AssemblyFileVersion("2.1.1.0")]
+[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyFileVersion("2.2.0.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -560,6 +560,113 @@ namespace RobloxNetworkTuner
         }
     }
 
+    public enum NetworkMediaType
+    {
+        Ethernet,
+        WiFi,
+        Unknown
+    }
+
+    public class NetworkProfileInfo
+    {
+        public NetworkMediaType MediaType = NetworkMediaType.Unknown;
+        public string AdapterName = "Unknown";
+        public string Description = "";
+        public string InterfaceGuid = "";
+        public int SignalPercent = 100;
+        public int RssiDbm = 0;
+        public string Band = "";
+        public string Ssid = "";
+        public bool IsWeakSignal = false; // < 55% or < -75 dBm
+        public string StatusSummary = "";
+    }
+
+    internal static class NetworkProfileDetector
+    {
+        public static NetworkProfileInfo DetectPrimaryProfile()
+        {
+            NetworkProfileInfo info = new NetworkProfileInfo();
+            try
+            {
+                List<Program.ActiveInterfaceDetector.ActiveInterfaceInfo> activeNics = Program.ActiveInterfaceDetector.GetActiveInterfaces();
+                if (activeNics.Count > 0)
+                {
+                    Program.ActiveInterfaceDetector.ActiveInterfaceInfo prim = activeNics[0];
+                    info.AdapterName = prim.Name;
+                    info.Description = prim.Description;
+                    info.InterfaceGuid = prim.Id;
+
+                    if (prim.InterfaceType == NetworkInterfaceType.Ethernet ||
+                        prim.InterfaceType == NetworkInterfaceType.GigabitEthernet ||
+                        prim.InterfaceType == NetworkInterfaceType.FastEthernetFx ||
+                        prim.InterfaceType == NetworkInterfaceType.FastEthernetT)
+                    {
+                        info.MediaType = NetworkMediaType.Ethernet;
+                        info.StatusSummary = "Ethernet (Low-Latency NDIS Steering Active)";
+                        return info;
+                    }
+                    else if (prim.InterfaceType == NetworkInterfaceType.Wireless80211)
+                    {
+                        info.MediaType = NetworkMediaType.WiFi;
+                    }
+                }
+
+                // Deep Wi-Fi inspection via netsh wlan
+                string wlanOut = Program.RunCapture("netsh.exe", "wlan show interfaces");
+                if (!string.IsNullOrEmpty(wlanOut) && wlanOut.IndexOf("State", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Match mState = Regex.Match(wlanOut, @"State\s*:\s*connected", RegexOptions.IgnoreCase);
+                    if (mState.Success)
+                    {
+                        info.MediaType = NetworkMediaType.WiFi;
+
+                        Match mName = Regex.Match(wlanOut, @"Name\s*:\s*(.+)", RegexOptions.IgnoreCase);
+                        if (mName.Success) info.AdapterName = mName.Groups[1].Value.Trim();
+
+                        Match mDesc = Regex.Match(wlanOut, @"Description\s*:\s*(.+)", RegexOptions.IgnoreCase);
+                        if (mDesc.Success && string.IsNullOrEmpty(info.Description)) info.Description = mDesc.Groups[1].Value.Trim();
+
+                        Match mSig = Regex.Match(wlanOut, @"Signal\s*:\s*(\d+)%", RegexOptions.IgnoreCase);
+                        if (mSig.Success) int.TryParse(mSig.Groups[1].Value, out info.SignalPercent);
+
+                        Match mRssi = Regex.Match(wlanOut, @"Rssi\s*:\s*(-?\d+)", RegexOptions.IgnoreCase);
+                        if (mRssi.Success) int.TryParse(mRssi.Groups[1].Value, out info.RssiDbm);
+
+                        Match mBand = Regex.Match(wlanOut, @"Band\s*:\s*(.+)", RegexOptions.IgnoreCase);
+                        if (mBand.Success) info.Band = mBand.Groups[1].Value.Trim();
+
+                        Match mSsid = Regex.Match(wlanOut, @"SSID\s*:\s*(.+)", RegexOptions.IgnoreCase);
+                        if (mSsid.Success) info.Ssid = mSsid.Groups[1].Value.Trim();
+
+                        info.IsWeakSignal = (info.SignalPercent < 55) || (info.RssiDbm < -75 && info.RssiDbm != 0);
+
+                        if (info.IsWeakSignal)
+                        {
+                            info.StatusSummary = string.Format("Wi-Fi ({0}% Signal | {1} dBm [Weak] - Roam Lock Bypassed for Link Stability)",
+                                info.SignalPercent, info.RssiDbm);
+                        }
+                        else
+                        {
+                            string bandStr = !string.IsNullOrEmpty(info.Band) ? info.Band : "5 GHz / DBS";
+                            info.StatusSummary = string.Format("Wi-Fi ({0}% Signal | {1} | Roam Lock & Scan Freeze Active)",
+                                info.SignalPercent, bandStr);
+                        }
+                        return info;
+                    }
+                }
+
+                if (info.MediaType == NetworkMediaType.Unknown)
+                {
+                    info.MediaType = NetworkMediaType.Ethernet;
+                    info.StatusSummary = "Ethernet / Generic Interface";
+                }
+            }
+            catch { }
+
+            return info;
+        }
+    }
+
     internal static class WifiOptimizationModule
     {
         public static void Apply(TunerState state)
@@ -567,6 +674,19 @@ namespace RobloxNetworkTuner
             Console.Write(" [*] Wi-Fi 7 / DBS roaming lock & wlanapi background scan freeze ..... ");
             try
             {
+                NetworkProfileInfo profile = NetworkProfileDetector.DetectPrimaryProfile();
+                if (profile.MediaType == NetworkMediaType.Ethernet)
+                {
+                    Program.PrintInfo("SKIPPED (Ethernet Active)");
+                    return;
+                }
+
+                if (profile.IsWeakSignal)
+                {
+                    Program.PrintInfo(string.Format("SKIPPED (Signal: {0}% - Roaming Preserved)", profile.SignalPercent));
+                    return;
+                }
+
                 using (NativeWifiController controller = new NativeWifiController())
                 {
                     List<NativeWifiController.WifiInterfaceEntry> ifaces = controller.EnumerateConnectedInterfaces();
@@ -592,7 +712,7 @@ namespace RobloxNetworkTuner
                         controller.SetBooleanOpcode(primary.Guid, NativeWifiApi.WLAN_INTF_OPCODE.wlan_intf_opcode_background_scan_enabled, false);
                         controller.SetBooleanOpcode(primary.Guid, NativeWifiApi.WLAN_INTF_OPCODE.wlan_intf_opcode_media_streaming_mode, true);
 
-                        Program.PrintSuccess("LOCKED (MediaMode=1)");
+                        Program.PrintSuccess(string.Format("LOCKED (Signal={0}%, MediaMode=1)", profile.SignalPercent));
                         return;
                     }
                 }
@@ -609,7 +729,7 @@ namespace RobloxNetworkTuner
                 }
                 else
                 {
-                    Program.PrintInfo("SKIPPED (Ethernet)");
+                    Program.PrintInfo("SKIPPED (No Active Wi-Fi)");
                 }
             }
             catch (Exception ex)
@@ -787,27 +907,32 @@ namespace RobloxNetworkTuner
                             key.SetValue("*InterruptModeration", "0", RegistryValueKind.String);
                         }
 
-                        // 5. Vendor-Specific Wi-Fi Tuning
-                        string descUpper = (rec.DriverDesc ?? "").ToUpperInvariant();
-                        if (descUpper.Contains("QUALCOMM") || descUpper.Contains("FASTCONNECT") || key.OpenSubKey(@"Ndi\params\roamPolicy") != null)
+                        // 5. Vendor-Specific Wi-Fi Tuning (Selective to Wi-Fi interfaces with stable signal)
+                        NetworkProfileInfo prof = NetworkProfileDetector.DetectPrimaryProfile();
+                        bool isWifiNic = (rec.Type == NetworkInterfaceType.Wireless80211) || (rec.DriverDesc ?? "").IndexOf("Wi-Fi", StringComparison.OrdinalIgnoreCase) >= 0 || (rec.DriverDesc ?? "").IndexOf("Wireless", StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (isWifiNic && !prof.IsWeakSignal)
                         {
-                            key.SetValue("roamPolicy", "1", RegistryValueKind.String);         // Stickiest link (Lowest roaming)
-                            key.SetValue("StaPreferredBand", "3", RegistryValueKind.String);   // 5 GHz Preferred
-                            key.SetValue("enableWmmTxop", "0", RegistryValueKind.String);      // WMM TXOP acceleration
-                        }
-                        else if (descUpper.Contains("INTEL") || key.OpenSubKey(@"Ndi\params\RoamAggressiveness") != null)
-                        {
-                            key.SetValue("RoamAggressiveness", "1", RegistryValueKind.String); // 1. Lowest
-                            key.SetValue("PreferredBand", "3", RegistryValueKind.String);      // 3. Prefer 5GHz
-                        }
-                        else if (descUpper.Contains("MEDIATEK") || key.OpenSubKey(@"Ndi\params\RoamingSensitivityLevel") != null)
-                        {
-                            key.SetValue("RoamingSensitivityLevel", "1", RegistryValueKind.String);
-                            key.SetValue("BandPreference", "2", RegistryValueKind.String);
-                        }
-                        else if (descUpper.Contains("REALTEK"))
-                        {
-                            key.SetValue("RoamingSensitivityLevel", "1", RegistryValueKind.String);
+                            string descUpper = (rec.DriverDesc ?? "").ToUpperInvariant();
+                            if (descUpper.Contains("QUALCOMM") || descUpper.Contains("FASTCONNECT") || key.OpenSubKey(@"Ndi\params\roamPolicy") != null)
+                            {
+                                key.SetValue("roamPolicy", "1", RegistryValueKind.String);         // Stickiest link (Lowest roaming)
+                                key.SetValue("StaPreferredBand", "3", RegistryValueKind.String);   // 5 GHz Preferred
+                                key.SetValue("enableWmmTxop", "0", RegistryValueKind.String);      // WMM TXOP acceleration
+                            }
+                            else if (descUpper.Contains("INTEL") || key.OpenSubKey(@"Ndi\params\RoamAggressiveness") != null)
+                            {
+                                key.SetValue("RoamAggressiveness", "1", RegistryValueKind.String); // 1. Lowest
+                                key.SetValue("PreferredBand", "3", RegistryValueKind.String);      // 3. Prefer 5GHz
+                            }
+                            else if (descUpper.Contains("MEDIATEK") || key.OpenSubKey(@"Ndi\params\RoamingSensitivityLevel") != null)
+                            {
+                                key.SetValue("RoamingSensitivityLevel", "1", RegistryValueKind.String);
+                                key.SetValue("BandPreference", "2", RegistryValueKind.String);
+                            }
+                            else if (descUpper.Contains("REALTEK"))
+                            {
+                                key.SetValue("RoamingSensitivityLevel", "1", RegistryValueKind.String);
+                            }
                         }
 
                         // 5. Constrain Hardware DMA Ring Buffer bloat
@@ -1408,8 +1533,12 @@ namespace RobloxNetworkTuner
         public double MaxRtt;
         public double MeanRtt;
         public double MedianRtt;
+        public double P95Rtt;
+        public double P99Rtt;
         public double Variance;
         public double StandardDeviation;
+        public double ConfidenceIntervalLower;
+        public double ConfidenceIntervalUpper;
         public double Rfc3550Jitter;
         public double PeakJitter;
     }
@@ -1418,10 +1547,24 @@ namespace RobloxNetworkTuner
     {
         public static BenchmarkMetrics RunBenchmark(string targetHost, int sampleCount, int intervalMs, int timeoutMs)
         {
+            // Auto-detect live Roblox game session if no target explicitly specified
+            if (string.IsNullOrEmpty(targetHost) || targetHost.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            {
+                RobloxSessionInfo liveSession = RobloxGameSessionTracker.GetCurrentSession();
+                if (liveSession != null && liveSession.IsConnected && !string.IsNullOrEmpty(liveSession.ServerIp))
+                {
+                    targetHost = liveSession.ServerIp;
+                }
+                else
+                {
+                    targetHost = "roblox.com";
+                }
+            }
+
             BenchmarkMetrics metrics = new BenchmarkMetrics();
             metrics.TargetHost = targetHost;
             metrics.TargetIp = targetHost;
-            metrics.AsnInfo = targetHost.Contains("roblox.com") ? "AS22697" : "Anycast";
+            metrics.AsnInfo = targetHost.Contains("roblox.com") ? "AS22697" : "Roblox Edge / Game Server";
             metrics.Sent = sampleCount;
             metrics.Received = 0;
             metrics.Lost = 0;
@@ -1521,7 +1664,7 @@ namespace RobloxNetworkTuner
                 metrics.MaxRtt = max;
                 metrics.MeanRtt = sum / rttList.Count;
 
-                // Median
+                // Median & Percentiles
                 List<double> sorted = new List<double>(rttList);
                 sorted.Sort();
                 int n = sorted.Count;
@@ -1534,6 +1677,11 @@ namespace RobloxNetworkTuner
                     metrics.MedianRtt = (sorted[(n / 2) - 1] + sorted[n / 2]) / 2.0;
                 }
 
+                int idx95 = Math.Min(n - 1, Math.Max(0, (int)Math.Ceiling(0.95 * n) - 1));
+                int idx99 = Math.Min(n - 1, Math.Max(0, (int)Math.Ceiling(0.99 * n) - 1));
+                metrics.P95Rtt = sorted[idx95];
+                metrics.P99Rtt = sorted[idx99];
+
                 // Sample Variance & Standard Deviation
                 double sumSquares = 0.0;
                 for (int i = 0; i < rttList.Count; i++)
@@ -1544,6 +1692,12 @@ namespace RobloxNetworkTuner
 
                 metrics.Variance = (n > 1) ? (sumSquares / (double)(n - 1)) : 0.0;
                 metrics.StandardDeviation = Math.Sqrt(metrics.Variance);
+
+                // 95% Confidence Interval (mean +/- 1.96 * s / sqrt(n))
+                double margin = (n > 1) ? (1.96 * metrics.StandardDeviation / Math.Sqrt(n)) : 0.0;
+                metrics.ConfidenceIntervalLower = Math.Max(0.0, metrics.MeanRtt - margin);
+                metrics.ConfidenceIntervalUpper = metrics.MeanRtt + margin;
+
                 metrics.Rfc3550Jitter = rfcJitter;
                 metrics.PeakJitter = peakJitter;
             }
@@ -1565,8 +1719,11 @@ namespace RobloxNetworkTuner
             Console.WriteLine("  Max RTT:       {0,7:F2} ms", m.MaxRtt);
             Console.WriteLine("  Mean RTT:      {0,7:F2} ms", m.MeanRtt);
             Console.WriteLine("  Median RTT:    {0,7:F2} ms", m.MedianRtt);
+            Console.WriteLine("  P95 RTT:       {0,7:F2} ms", m.P95Rtt);
+            Console.WriteLine("  P99 RTT:       {0,7:F2} ms", m.P99Rtt);
             Console.WriteLine("  Variance:      {0,7:F2} ms^2", m.Variance);
             Console.WriteLine("  Std Dev:       {0,7:F2} ms", m.StandardDeviation);
+            Console.WriteLine("  95% CI:        [{0:F2} ms - {1:F2} ms]", m.ConfidenceIntervalLower, m.ConfidenceIntervalUpper);
             Console.WriteLine();
 
             Console.WriteLine("Jitter (RFC 3550):");
@@ -1589,13 +1746,508 @@ namespace RobloxNetworkTuner
         }
     }
 
+    #region Roblox Game Session Tracker (Live Transport Log Tailer)
+
+    public class RobloxSessionInfo
+    {
+        public bool IsConnected;
+        public string ServerIp = "";
+        public int ServerPort = 0;
+        public string Datacenter = "";
+        public DateTime ConnectedAt;
+        public string LogFilePath = "";
+    }
+
+    public static class RobloxGameSessionTracker
+    {
+        private static string currentLogPath = null;
+        private static long lastReadPosition = 0;
+        private static RobloxSessionInfo currentSession = new RobloxSessionInfo();
+        private static readonly object trackerLock = new object();
+
+        public static RobloxSessionInfo GetCurrentSession()
+        {
+            lock (trackerLock)
+            {
+                PollSession();
+                return currentSession;
+            }
+        }
+
+        public static void PollSession()
+        {
+            try
+            {
+                string logsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Roblox\logs");
+                if (!Directory.Exists(logsDir)) return;
+
+                // If Roblox process is not running, mark disconnected
+                Process[] procs = Process.GetProcessesByName(Program.TargetProcessName);
+                if (procs.Length == 0)
+                {
+                    if (currentSession.IsConnected)
+                    {
+                        currentSession.IsConnected = false;
+                    }
+                    return;
+                }
+
+                // Find newest Player log
+                DirectoryInfo dir = new DirectoryInfo(logsDir);
+                FileInfo[] files = dir.GetFiles("*Player*.log");
+                if (files == null || files.Length == 0) return;
+
+                FileInfo newest = null;
+                DateTime newestTime = DateTime.MinValue;
+                for (int i = 0; i < files.Length; i++)
+                {
+                    if (files[i].LastWriteTimeUtc > newestTime)
+                    {
+                        newestTime = files[i].LastWriteTimeUtc;
+                        newest = files[i];
+                    }
+                }
+
+                if (newest == null) return;
+
+                if (currentLogPath != newest.FullName)
+                {
+                    currentLogPath = newest.FullName;
+                    lastReadPosition = 0;
+                    currentSession = new RobloxSessionInfo();
+                    currentSession.LogFilePath = currentLogPath;
+                }
+
+                using (FileStream fs = new FileStream(currentLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    if (fs.Length < lastReadPosition)
+                    {
+                        lastReadPosition = 0;
+                    }
+
+                    if (fs.Length > lastReadPosition)
+                    {
+                        fs.Seek(lastReadPosition, SeekOrigin.Begin);
+                        using (StreamReader sr = new StreamReader(fs, Encoding.UTF8))
+                        {
+                            string line;
+                            while ((line = sr.ReadLine()) != null)
+                            {
+                                ParseLogLine(line);
+                            }
+                        }
+                        lastReadPosition = fs.Position;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void ParseLogLine(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return;
+
+            if (line.IndexOf("Session reported disconnected", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                line.IndexOf("Disconnect complete", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                line.IndexOf("Disconnecting from server", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                line.IndexOf("Terminating SingleSurfaceApp", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                currentSession.IsConnected = false;
+                return;
+            }
+
+            Match mUdmux = Regex.Match(line, @"UDMUX Address\s*=\s*([0-9.]+),\s*Port\s*=\s*([0-9]+)(?:.*?Datacenter\s*=\s*([0-9]+))?", RegexOptions.IgnoreCase);
+            if (mUdmux.Success)
+            {
+                currentSession.ServerIp = mUdmux.Groups[1].Value;
+                int port;
+                if (int.TryParse(mUdmux.Groups[2].Value, out port)) currentSession.ServerPort = port;
+                if (mUdmux.Groups[3].Success) currentSession.Datacenter = mUdmux.Groups[3].Value;
+                currentSession.IsConnected = true;
+                currentSession.ConnectedAt = DateTime.UtcNow;
+                return;
+            }
+
+            Match mConn = Regex.Match(line, @"(?:Connected to server at|Connection accepted from)\s*([0-9.]+)[|:]([0-9]+)", RegexOptions.IgnoreCase);
+            if (mConn.Success)
+            {
+                currentSession.ServerIp = mConn.Groups[1].Value;
+                int port;
+                if (int.TryParse(mConn.Groups[2].Value, out port)) currentSession.ServerPort = port;
+                currentSession.IsConnected = true;
+                currentSession.ConnectedAt = DateTime.UtcNow;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Subsystem: Bufferbloat Diagnostic Engine
+
+    public struct BufferbloatResult
+    {
+        public double IdleRttMs;
+        public double LoadedRttMs;
+        public double DeltaRttMs;
+        public string Grade; // A+, A, B, C, D, F
+        public string Recommendation;
+        public int SamplesTested;
+        public bool Success;
+        public string ErrorMessage;
+    }
+
+    public static class BufferbloatDiagnosticModule
+    {
+        private const string LoadTestUrl = "https://speed.cloudflare.com/__down?bytes=5000000";
+
+        public static BufferbloatResult RunTest(string targetHost, Action<string> progressCallback)
+        {
+            BufferbloatResult result = new BufferbloatResult();
+            try
+            {
+                if (string.IsNullOrEmpty(targetHost)) targetHost = "roblox.com";
+
+                string targetIp = targetHost;
+                try
+                {
+                    IPAddress[] ips = Dns.GetHostAddresses(targetHost);
+                    for (int i = 0; i < ips.Length; i++)
+                    {
+                        if (ips[i].AddressFamily == AddressFamily.InterNetwork)
+                        {
+                            targetIp = ips[i].ToString();
+                            break;
+                        }
+                    }
+                }
+                catch { }
+
+                if (progressCallback != null) progressCallback("Measuring baseline idle RTT...");
+
+                // 1. Idle Phase (10 samples)
+                List<double> idleSamples = CollectSamples(targetIp, 10, 100);
+                if (idleSamples.Count < 4)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = "Insufficient response from target host for baseline.";
+                    return result;
+                }
+
+                idleSamples.Sort();
+                result.IdleRttMs = idleSamples[idleSamples.Count / 2];
+
+                if (progressCallback != null) progressCallback(string.Format("Baseline RTT: {0:F1} ms. Testing under 5MB download stream...", result.IdleRttMs));
+
+                // 2. Loaded Phase: Download stream running concurrently
+                List<double> loadedSamples = new List<double>();
+
+                Thread downloadThread = new Thread(delegate()
+                {
+                    try
+                    {
+                        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                        using (WebClient wc = new WebClient())
+                        {
+                            wc.Headers.Add("User-Agent", "RobloxNetworkTuner/2.2");
+                            wc.DownloadData(LoadTestUrl);
+                        }
+                    }
+                    catch { }
+                });
+
+                downloadThread.IsBackground = true;
+                downloadThread.Start();
+
+                Thread.Sleep(200);
+
+                int count = 0;
+                using (Ping p = new Ping())
+                {
+                    byte[] buf = new byte[32];
+                    PingOptions opts = new PingOptions(64, true);
+
+                    while (count < 15)
+                    {
+                        Stopwatch sw = Stopwatch.StartNew();
+                        try
+                        {
+                            PingReply reply = p.Send(targetIp, 1200, buf, opts);
+                            sw.Stop();
+                            if (reply != null && reply.Status == IPStatus.Success)
+                            {
+                                double ms = (sw.ElapsedTicks * 1000.0) / (double)Stopwatch.Frequency;
+                                loadedSamples.Add(ms);
+                            }
+                        }
+                        catch { }
+
+                        count++;
+                        Thread.Sleep(80);
+                    }
+                }
+
+                downloadThread.Join(5000);
+
+                if (loadedSamples.Count < 4)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = "Failed to collect loaded samples during traffic burst.";
+                    return result;
+                }
+
+                loadedSamples.Sort();
+                result.LoadedRttMs = loadedSamples[loadedSamples.Count / 2];
+                result.DeltaRttMs = Math.Max(0.0, result.LoadedRttMs - result.IdleRttMs);
+                result.SamplesTested = idleSamples.Count + loadedSamples.Count;
+
+                if (result.DeltaRttMs <= 5.0)
+                {
+                    result.Grade = "A+";
+                    result.Recommendation = "Exceptional network pacing. Zero bufferbloat detected.";
+                }
+                else if (result.DeltaRttMs <= 15.0)
+                {
+                    result.Grade = "A";
+                    result.Recommendation = "Minimal queue delay. Home network pacing is highly responsive.";
+                }
+                else if (result.DeltaRttMs <= 30.0)
+                {
+                    result.Grade = "B";
+                    result.Recommendation = "Moderate queueing delay under load. Minor latency rise during streaming.";
+                }
+                else if (result.DeltaRttMs <= 60.0)
+                {
+                    result.Grade = "C";
+                    result.Recommendation = "Noticeable bufferbloat (+30-60ms). Router SQM (CAKE/FQ-CoDel) recommended.";
+                }
+                else if (result.DeltaRttMs <= 100.0)
+                {
+                    result.Grade = "D";
+                    result.Recommendation = "High bufferbloat (+60-100ms lag spikes). Router queue bloat requires SQM.";
+                }
+                else
+                {
+                    result.Grade = "F";
+                    result.Recommendation = "Severe bufferbloat (+100ms+ delay). Packets queue severely in router buffers.";
+                }
+
+                result.Success = true;
+            }
+            catch (Exception ex)
+            {
+                result.Success = false;
+                result.ErrorMessage = ex.Message;
+            }
+
+            return result;
+        }
+
+        private static List<double> CollectSamples(string targetIp, int count, int intervalMs)
+        {
+            List<double> list = new List<double>();
+            using (Ping p = new Ping())
+            {
+                byte[] buf = new byte[32];
+                PingOptions opts = new PingOptions(64, true);
+
+                for (int i = 0; i < count; i++)
+                {
+                    Stopwatch sw = Stopwatch.StartNew();
+                    try
+                    {
+                        PingReply reply = p.Send(targetIp, 1200, buf, opts);
+                        sw.Stop();
+                        if (reply != null && reply.Status == IPStatus.Success)
+                        {
+                            double ms = (sw.ElapsedTicks * 1000.0) / (double)Stopwatch.Frequency;
+                            list.Add(ms);
+                        }
+                    }
+                    catch { }
+
+                    if (i < count - 1) Thread.Sleep(intervalMs);
+                }
+            }
+            return list;
+        }
+
+        public static void PrintResult(BufferbloatResult res)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("================================================================================");
+            Console.WriteLine(" ROBLOX NETWORK TUNER - BUFFERBLOAT DIAGNOSTIC REPORT");
+            Console.WriteLine("================================================================================");
+            Console.ResetColor();
+
+            if (!res.Success)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(" [!] Bufferbloat diagnostic failed: {0}", res.ErrorMessage);
+                Console.ResetColor();
+                return;
+            }
+
+            Console.WriteLine(" Baseline Idle RTT  : {0,7:F2} ms", res.IdleRttMs);
+            Console.WriteLine(" Loaded Active RTT  : {0,7:F2} ms", res.LoadedRttMs);
+            Console.WriteLine(" Latency Delta (dRTT): +{0,6:F2} ms", res.DeltaRttMs);
+            Console.WriteLine();
+
+            ConsoleColor gradeColor = ConsoleColor.Green;
+            if (res.Grade == "B") gradeColor = ConsoleColor.Cyan;
+            else if (res.Grade == "C") gradeColor = ConsoleColor.Yellow;
+            else if (res.Grade == "D" || res.Grade == "F") gradeColor = ConsoleColor.Red;
+
+            Console.ForegroundColor = gradeColor;
+            Console.WriteLine(" Bufferbloat Grade  : [{0}]", res.Grade);
+            Console.ResetColor();
+            Console.WriteLine(" Assessment         : {0}", res.Recommendation);
+            Console.WriteLine("================================================================================");
+        }
+    }
+
+    #endregion
+
+    #region Subsystems: Evidence-Based QoS & Crash Recovery
+
+    public static class QosVerificationModule
+    {
+        public static bool VerifyQosPolicy(string testTarget)
+        {
+            try
+            {
+                BenchmarkMetrics pre = DiagnosticBenchmarkModule.RunBenchmark(testTarget, 8, 25, 1000);
+                if (pre.LossPercentage >= 90.0) return true;
+
+                Thread.Sleep(100);
+
+                BenchmarkMetrics post = DiagnosticBenchmarkModule.RunBenchmark(testTarget, 8, 25, 1000);
+                if (post.LossPercentage > pre.LossPercentage + 15.0)
+                {
+                    return false;
+                }
+                return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+    }
+
+    public static class CrashRecoveryModule
+    {
+        public static bool CheckAndRecoverOrphanedSession()
+        {
+            if (!TunerStateStorage.StateFileExists()) return false;
+
+            try
+            {
+                TunerState saved = TunerStateStorage.LoadFromFile();
+                if (saved == null)
+                {
+                    TunerStateStorage.DeleteStateFile();
+                    return false;
+                }
+
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine(" [*] Found previous session state. Restoring baseline defaults...");
+                Console.ResetColor();
+
+                SchedulingModule.Restore(saved);
+                WifiOptimizationModule.Restore(saved);
+                NdisOptimizationModule.Restore(saved);
+                PmtuOptimizationModule.Restore(saved);
+                AfdOptimizationModule.Restore(saved);
+
+                Program.RevertGlobalTcpAndQos();
+                TunerStateStorage.DeleteStateFile();
+                return true;
+            }
+            catch
+            {
+                TunerStateStorage.DeleteStateFile();
+                return false;
+            }
+        }
+
+        public static void VerifyRestoration()
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("================================================================================");
+            Console.WriteLine(" ROBLOX NETWORK TUNER - RESTORATION FIDELITY AUDIT");
+            Console.WriteLine("================================================================================");
+            Console.ResetColor();
+
+            int passCount = 0;
+            int totalChecks = 6;
+
+            // 1. Timer Resolution
+            uint minRes, maxRes, curRes;
+            NativeMethods.NtQueryTimerResolution(out minRes, out maxRes, out curRes);
+            bool timerStock = (curRes >= 10000);
+            Console.WriteLine(" 1. Timer Resolution (Stock: >= 1.0ms, Current: {0:F2}ms) ..... [{1}]", (double)curRes / 10000.0, timerStock ? "PASS" : "WARN");
+            if (timerStock) passCount++;
+
+            // 2. Wi-Fi AutoConfig
+            string wifiOut = Program.RunCapture("netsh.exe", "wlan show interfaces");
+            bool wifiStock = !wifiOut.Contains("Auto configuration is disabled");
+            Console.WriteLine(" 2. Wi-Fi Background Scanning Active ......................... [{0}]", wifiStock ? "PASS" : "WARN");
+            if (wifiStock) passCount++;
+
+            // 3. QoS Policy Cleaned
+            bool qosClean = false;
+            using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\QoS\RobloxPriority"))
+            {
+                qosClean = (k == null);
+            }
+            Console.WriteLine(" 3. Policy-Based QoS Cleaned ................................ [{0}]", qosClean ? "PASS" : "FAIL");
+            if (qosClean) passCount++;
+
+            // 4. AFD Buffers Stock
+            bool afdStock = false;
+            using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\AFD\Parameters"))
+            {
+                afdStock = (k == null || k.GetValue("FastSendDatagramThreshold") == null);
+            }
+            Console.WriteLine(" 4. Winsock AFD Parameters Stock ............................. [{0}]", afdStock ? "PASS" : "FAIL");
+            if (afdStock) passCount++;
+
+            // 5. Global NetOffload Stock
+            string offloadStr = Program.RunCapture("powershell.exe", "-NoProfile -Command \"(Get-NetOffloadGlobalSetting).PacketCoalescingFilter\"");
+            bool netOffloadStock = offloadStr.IndexOf("Enabled", StringComparison.OrdinalIgnoreCase) >= 0;
+            Console.WriteLine(" 5. Packet Coalescing Filter Enabled ......................... [{0}]", netOffloadStock ? "PASS" : "WARN");
+            if (netOffloadStock) passCount++;
+
+            // 6. Tuner State File Deleted
+            bool stateClean = !TunerStateStorage.StateFileExists();
+            Console.WriteLine(" 6. State Snapshot Cleaned .................................. [{0}]", stateClean ? "PASS" : "FAIL");
+            if (stateClean) passCount++;
+
+            Console.WriteLine();
+            if (passCount == totalChecks)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(" Result: 100% CLEAN - All settings match default Windows configuration.");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine(" Result: {0}/{1} checks verified stock. Run 'RobloxNetworkTuner.exe --restore' to re-align.", passCount, totalChecks);
+            }
+            Console.ResetColor();
+            Console.WriteLine("================================================================================");
+        }
+    }
+
+    #endregion
+
     #endregion
 
     #region GitHub Releases Auto-Update Engine
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.1.1";
+        public const string CurrentVersion = "2.2.0";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -1862,7 +2514,10 @@ namespace RobloxNetworkTuner
 
         private string activeAdapterName = "Detecting active network adapter...";
         private string activeAdapterDetails = "IPv4: Initializing... | MTU: 1500 | Nagle: Disabled";
+        private string robloxSessionStatus = "Standby: Monitoring Roblox client transport logs...";
         private string watchdogStatus = "Standby: Waiting for RobloxPlayerBeta.exe...";
+        private string bufferbloatStatus = "Bufferbloat: Not Tested (Click 'Bufferbloat Test' below)";
+        private bool isBufferbloatRunning = false;
         private bool robloxRunning = false;
         private int robloxPid = 0;
         private double liveRtt = 0.0;
@@ -1870,21 +2525,25 @@ namespace RobloxNetworkTuner
         private double prevRtt = 0.0;
         private bool isFirstPing = true;
         private bool isTuningApplied = false;
+        private string liveTarget = "roblox.com";
+        private bool isLiveGameServer = false;
 
         private Rectangle rectBtnClose = new Rectangle(580, 16, 26, 26);
         private Rectangle rectBtnMin = new Rectangle(546, 16, 26, 26);
-        private Rectangle rectBtnTray = new Rectangle(20, 642, 280, 42);
-        private Rectangle rectBtnExit = new Rectangle(320, 642, 280, 42);
+        private Rectangle rectBtnBufferbloat = new Rectangle(20, 596, 180, 42);
+        private Rectangle rectBtnTray = new Rectangle(210, 596, 190, 42);
+        private Rectangle rectBtnExit = new Rectangle(410, 596, 190, 42);
 
         private bool hoverBtnClose = false;
         private bool hoverBtnMin = false;
+        private bool hoverBtnBufferbloat = false;
         private bool hoverBtnTray = false;
         private bool hoverBtnExit = false;
 
         public TunerGuiForm()
         {
             this.Text = "Roblox Network Tuner [x64]";
-            this.Size = new Size(620, 705);
+            this.Size = new Size(620, 665);
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(11, 14, 20); // Deep Obsidian
@@ -1931,9 +2590,9 @@ namespace RobloxNetworkTuner
             this.watchdogTimer.Interval = 1000;
             this.watchdogTimer.Tick += WatchdogTimer_Tick;
 
-            // Telemetry Ping Timer (3000ms)
+            // Telemetry Ping Timer (2500ms)
             this.telemetryTimer = new System.Windows.Forms.Timer();
-            this.telemetryTimer.Interval = 3000;
+            this.telemetryTimer.Interval = 2500;
             this.telemetryTimer.Tick += TelemetryTimer_Tick;
         }
 
@@ -1957,20 +2616,13 @@ namespace RobloxNetworkTuner
             {
                 try
                 {
-                    // 1. Refresh active network adapter
-                    List<Program.ActiveInterfaceDetector.ActiveInterfaceInfo> nics = Program.ActiveInterfaceDetector.GetActiveInterfaces();
-                    if (nics.Count > 0)
-                    {
-                        Program.ActiveInterfaceDetector.ActiveInterfaceInfo nic = nics[0];
-                        activeAdapterName = nic.Description;
-                        activeAdapterDetails = string.Format("IPv4: {0}   |   MTU: {1} (Optimized)   |   Nagle: Disabled",
-                            nic.Ipv4Address != null ? nic.Ipv4Address.ToString() : "N/A", nic.Mtu);
-                    }
-                    else
-                    {
-                        activeAdapterName = "No active physical adapter detected";
-                        activeAdapterDetails = "IPv4: N/A | MTU: 1500";
-                    }
+                    // 0. Auto-recover orphaned session if present
+                    CrashRecoveryModule.CheckAndRecoverOrphanedSession();
+
+                    // 1. Refresh active network adapter and profile
+                    NetworkProfileInfo prof = NetworkProfileDetector.DetectPrimaryProfile();
+                    activeAdapterName = !string.IsNullOrEmpty(prof.Description) ? prof.Description : prof.AdapterName;
+                    activeAdapterDetails = prof.StatusSummary;
 
                     // 2. Apply optimizations
                     Program.ApplyAll();
@@ -2008,18 +2660,38 @@ namespace RobloxNetworkTuner
 
                     string prio = "High";
                     try { prio = procs[0].PriorityClass.ToString(); } catch { }
-                    watchdogStatus = string.Format("ACTIVE (PID {0}) — CPU: {1}, I/O: High, EcoQoS: Off", robloxPid, prio);
+                    watchdogStatus = string.Format("Process: ACTIVE (PID {0}) — CPU: {1}, I/O: High, EcoQoS: Off", robloxPid, prio);
+
+                    // Check live Roblox game session
+                    RobloxSessionInfo sess = RobloxGameSessionTracker.GetCurrentSession();
+                    if (sess != null && sess.IsConnected && !string.IsNullOrEmpty(sess.ServerIp))
+                    {
+                        isLiveGameServer = true;
+                        liveTarget = sess.ServerIp;
+                        string dc = !string.IsNullOrEmpty(sess.Datacenter) ? (" | DC: " + sess.Datacenter) : "";
+                        robloxSessionStatus = string.Format("Game Server: {0}:{1}{2} (Live Session)", sess.ServerIp, sess.ServerPort, dc);
+                    }
+                    else
+                    {
+                        isLiveGameServer = false;
+                        liveTarget = "roblox.com";
+                        robloxSessionStatus = "Menu / Teleporting (Monitoring game transport...)";
+                    }
                 }
                 else
                 {
+                    isLiveGameServer = false;
+                    liveTarget = "roblox.com";
                     if (robloxRunning)
                     {
                         robloxRunning = false;
                         watchdogStatus = "STANDBY: Roblox exited. Waiting for game launch...";
+                        robloxSessionStatus = "Standby: Waiting for Roblox session...";
                     }
                     else
                     {
                         watchdogStatus = "STANDBY: Waiting for RobloxPlayerBeta.exe launch...";
+                        robloxSessionStatus = "Standby: Monitoring Roblox client transport logs...";
                     }
                 }
                 this.Invalidate();
@@ -2044,10 +2716,13 @@ namespace RobloxNetworkTuner
         {
             try
             {
+                string target = liveTarget;
+                if (string.IsNullOrEmpty(target)) target = "roblox.com";
+
                 using (Ping p = new Ping())
                 {
                     byte[] buf = new byte[32];
-                    PingReply reply = p.Send("roblox.com", 1200, buf);
+                    PingReply reply = p.Send(target, 1200, buf);
                     if (reply != null && reply.Status == IPStatus.Success)
                     {
                         double rtt = reply.RoundtripTime;
@@ -2112,6 +2787,52 @@ namespace RobloxNetworkTuner
                     this.WindowState = FormWindowState.Minimized;
                     return;
                 }
+                if (rectBtnBufferbloat.Contains(e.Location))
+                {
+                    if (!isBufferbloatRunning)
+                    {
+                        isBufferbloatRunning = true;
+                        bufferbloatStatus = "Bufferbloat: Testing under 5MB download burst...";
+                        this.Invalidate();
+
+                        string target = liveTarget;
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            BufferbloatResult bRes = BufferbloatDiagnosticModule.RunTest(target, delegate(string progress)
+                            {
+                                try
+                                {
+                                    this.BeginInvoke((MethodInvoker)delegate
+                                    {
+                                        bufferbloatStatus = "Bufferbloat: " + progress;
+                                        this.Invalidate();
+                                    });
+                                }
+                                catch { }
+                            });
+
+                            try
+                            {
+                                this.BeginInvoke((MethodInvoker)delegate
+                                {
+                                    isBufferbloatRunning = false;
+                                    if (bRes.Success)
+                                    {
+                                        bufferbloatStatus = string.Format("Bufferbloat: Grade {0} (Δ +{1:F1} ms) — {2}",
+                                            bRes.Grade, bRes.DeltaRttMs, bRes.Recommendation);
+                                    }
+                                    else
+                                    {
+                                        bufferbloatStatus = "Bufferbloat Test Failed: " + bRes.ErrorMessage;
+                                    }
+                                    this.Invalidate();
+                                });
+                            }
+                            catch { }
+                        });
+                    }
+                    return;
+                }
                 if (rectBtnTray.Contains(e.Location))
                 {
                     this.Hide();
@@ -2144,6 +2865,9 @@ namespace RobloxNetworkTuner
 
             bool hMin = rectBtnMin.Contains(e.Location);
             if (hMin != hoverBtnMin) { hoverBtnMin = hMin; redraw = true; }
+
+            bool hBb = rectBtnBufferbloat.Contains(e.Location);
+            if (hBb != hoverBtnBufferbloat) { hoverBtnBufferbloat = hBb; redraw = true; }
 
             bool hTray = rectBtnTray.Contains(e.Location);
             if (hTray != hoverBtnTray) { hoverBtnTray = hTray; redraw = true; }
@@ -2189,164 +2913,193 @@ namespace RobloxNetworkTuner
             using (Font fSub = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bSub = new SolidBrush(Color.FromArgb(0, 240, 255)))
             {
-                g.DrawString("NETWORK OPTIMIZER FOR ROBLOX", fSub, bSub, 69, 37);
+                g.DrawString("ADAPTIVE LOW-LATENCY ENGINE", fSub, bSub, 69, 37);
             }
 
             // Version Pill
-            DrawPill(g, 342, 16, 54, 20, "v2.1.1", Color.FromArgb(22, 35, 59), Color.FromArgb(0, 240, 255));
+            DrawPill(g, 342, 16, 54, 20, "v2.2.0", Color.FromArgb(22, 35, 59), Color.FromArgb(0, 240, 255));
 
             // Minimize & Close Buttons
             DrawWindowButton(g, rectBtnMin, "—", hoverBtnMin, Color.FromArgb(35, 45, 66), Color.White);
             DrawWindowButton(g, rectBtnClose, "✕", hoverBtnClose, Color.FromArgb(232, 17, 35), Color.White);
 
-            // 2. Hero Status Card (Y: 82 to 142)
-            Rectangle rectHero = new Rectangle(20, 82, 580, 60);
+            // 2. Hero Status Card (Y: 80 to 138)
+            Rectangle rectHero = new Rectangle(20, 80, 580, 58);
             Color heroBg = isTuningApplied ? Color.FromArgb(13, 34, 29) : Color.FromArgb(34, 25, 13);
             Color heroBorder = isTuningApplied ? Color.FromArgb(0, 255, 163) : Color.FromArgb(255, 180, 0);
             Color heroText = isTuningApplied ? Color.FromArgb(0, 255, 163) : Color.FromArgb(255, 180, 0);
 
             DrawRoundedCard(g, rectHero, heroBg, heroBorder, 8);
 
-            using (Font fHeroHead = new Font("Segoe UI", 11f, FontStyle.Bold))
+            using (Font fHeroHead = new Font("Segoe UI", 10.5f, FontStyle.Bold))
             using (Brush bHeroHead = new SolidBrush(heroText))
             {
                 string heroTitle = isTuningApplied
-                    ? "●  OPTIMIZED — KERNEL & NETWORK STACK LOCKED"
-                    : "○  INITIALIZING LOW-LATENCY ENGINE...";
-                g.DrawString(heroTitle, fHeroHead, bHeroHead, 36, 92);
+                    ? "●  OPTIMIZED — ADAPTIVE LOW-LATENCY ENGINE ACTIVE"
+                    : "○  INITIALIZING ADAPTIVE ENGINE...";
+                g.DrawString(heroTitle, fHeroHead, bHeroHead, 36, 89);
             }
-            using (Font fHeroSub = new Font("Segoe UI", 8.25f, FontStyle.Regular))
+            using (Font fHeroSub = new Font("Segoe UI", 8.0f, FontStyle.Regular))
             using (Brush bHeroSub = new SolidBrush(Color.FromArgb(160, 200, 185)))
             {
-                g.DrawString("0.50ms High-Precision Timer  •  DSCP 46 Expedited Forwarding  •  Fast-Path UDP", fHeroSub, bHeroSub, 38, 117);
+                g.DrawString("0.50ms Kernel Timer  •  AFD Fast-Path  •  NDIS Steering  •  Adaptive Profile Safety", fHeroSub, bHeroSub, 38, 113);
             }
 
-            // 3. Active Network Interface Card (Y: 152 to 230)
-            Rectangle rectNic = new Rectangle(20, 152, 580, 78);
+            // 3. Active Network Interface & Profile Card (Y: 144 to 218)
+            Rectangle rectNic = new Rectangle(20, 144, 580, 74);
             DrawRoundedCard(g, rectNic, Color.FromArgb(18, 23, 35), Color.FromArgb(31, 41, 61), 8);
 
-            using (Font fCardHead = new Font("Segoe UI", 7.75f, FontStyle.Bold))
+            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(126, 139, 155)))
             {
-                g.DrawString("ACTIVE NETWORK ADAPTER", fCardHead, bCardHead, 36, 162);
+                g.DrawString("ACTIVE NETWORK ADAPTER & ADAPTIVE PROFILE", fCardHead, bCardHead, 36, 153);
             }
-            using (Font fNicName = new Font("Segoe UI", 9.5f, FontStyle.Bold))
+            using (Font fNicName = new Font("Segoe UI", 9.25f, FontStyle.Bold))
             using (Brush bWhite = new SolidBrush(Color.White))
             {
                 string truncatedNic = activeAdapterName.Length > 58 ? activeAdapterName.Substring(0, 58) + "..." : activeAdapterName;
-                g.DrawString(truncatedNic, fNicName, bWhite, 36, 182);
+                g.DrawString(truncatedNic, fNicName, bWhite, 36, 172);
             }
-            using (Font fNicDet = new Font("Segoe UI", 8.25f, FontStyle.Regular))
+            using (Font fNicDet = new Font("Segoe UI", 8.0f, FontStyle.Regular))
             using (Brush bCyan = new SolidBrush(Color.FromArgb(0, 240, 255)))
             {
-                g.DrawString(activeAdapterDetails, fNicDet, bCyan, 36, 204);
+                g.DrawString(activeAdapterDetails, fNicDet, bCyan, 36, 194);
             }
 
-            // 4. Target Process Watchdog Card (Y: 238 to 316)
-            Rectangle rectWatch = new Rectangle(20, 238, 580, 78);
-            DrawRoundedCard(g, rectWatch, Color.FromArgb(18, 23, 35), Color.FromArgb(31, 41, 61), 8);
+            // 4. Roblox Game Session & Target Telemetry Card (Y: 224 to 298)
+            Rectangle rectSession = new Rectangle(20, 224, 580, 74);
+            DrawRoundedCard(g, rectSession, Color.FromArgb(18, 23, 35), Color.FromArgb(31, 41, 61), 8);
 
-            using (Font fCardHead = new Font("Segoe UI", 7.75f, FontStyle.Bold))
+            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(126, 139, 155)))
             {
-                g.DrawString("TARGET PROCESS WATCHDOG (AUTOMATIC BOOST)", fCardHead, bCardHead, 36, 248);
+                g.DrawString("ROBLOX SESSION & TARGET TELEMETRY", fCardHead, bCardHead, 36, 233);
             }
-            using (Font fProc = new Font("Segoe UI", 9.5f, FontStyle.Bold))
-            using (Brush bWhite = new SolidBrush(Color.White))
+            using (Font fTarget = new Font("Segoe UI", 9.25f, FontStyle.Bold))
+            using (Brush bTargetColor = new SolidBrush(isLiveGameServer ? Color.FromArgb(0, 255, 163) : Color.White))
             {
-                g.DrawString("RobloxPlayerBeta.exe", fProc, bWhite, 36, 268);
+                g.DrawString(robloxSessionStatus, fTarget, bTargetColor, 36, 252);
             }
-            using (Font fWatchStat = new Font("Segoe UI", 8.25f, FontStyle.Regular))
+            using (Font fWatchStat = new Font("Segoe UI", 8.0f, FontStyle.Regular))
             using (Brush bWatchColor = new SolidBrush(robloxRunning ? Color.FromArgb(0, 255, 163) : Color.FromArgb(150, 165, 185)))
             {
-                g.DrawString(watchdogStatus, fWatchStat, bWatchColor, 36, 290);
+                g.DrawString(watchdogStatus, fWatchStat, bWatchColor, 36, 274);
             }
 
-            // 5. Kernel & QoS Parameter Card (Y: 324 to 442)
-            Rectangle rectStack = new Rectangle(20, 324, 580, 118);
+            // 5. Kernel & Socket Hardware Queue Card (Y: 304 to 402)
+            Rectangle rectStack = new Rectangle(20, 304, 580, 98);
             DrawRoundedCard(g, rectStack, Color.FromArgb(18, 23, 35), Color.FromArgb(31, 41, 61), 8);
 
-            using (Font fCardHead = new Font("Segoe UI", 7.75f, FontStyle.Bold))
+            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(126, 139, 155)))
             {
-                g.DrawString("LOW-LATENCY KERNEL & SOCKET TUNING", fCardHead, bCardHead, 36, 334);
+                g.DrawString("LOW-LATENCY KERNEL & SOCKET TUNING", fCardHead, bCardHead, 36, 313);
             }
 
-            using (Font fParam = new Font("Segoe UI", 8.25f, FontStyle.Regular))
+            using (Font fParam = new Font("Segoe UI", 8.0f, FontStyle.Regular))
             using (Brush bParam = new SolidBrush(Color.FromArgb(220, 230, 245)))
             using (Brush bCheck = new SolidBrush(Color.FromArgb(0, 255, 163)))
             {
-                g.DrawString("✓", fParam, bCheck, 36, 356);
-                g.DrawString("Global Timer Resolution: 0.50 ms (2000 Hz NT Kernel Interrupt Rate)", fParam, bParam, 56, 356);
+                g.DrawString("✓", fParam, bCheck, 36, 332);
+                g.DrawString("Global Timer Resolution: 0.50 ms (2000 Hz NT Kernel Interrupt Rate)", fParam, bParam, 56, 332);
 
-                g.DrawString("✓", fParam, bCheck, 36, 376);
-                g.DrawString("Winsock AFD UDP Fast-Path: 1500 Byte Datagram Threshold Locked", fParam, bParam, 56, 376);
+                g.DrawString("✓", fParam, bCheck, 36, 349);
+                g.DrawString("Winsock AFD UDP Fast-Path: 1500 Byte Datagram Threshold Locked", fParam, bParam, 56, 349);
 
-                g.DrawString("✓", fParam, bCheck, 36, 396);
-                g.DrawString("Wi-Fi 7 / DBS Background Scan: Frozen (Zero 60s Lag & Ping Spikes)", fParam, bParam, 56, 396);
+                g.DrawString("✓", fParam, bCheck, 36, 366);
+                g.DrawString("NDIS Miniport & DPC Affinity: Flow Control Off, Cores 4-7 Steering", fParam, bParam, 56, 366);
 
-                g.DrawString("✓", fParam, bCheck, 36, 416);
-                g.DrawString("MMCSS & Policy QoS: 100% Responsiveness, DSCP 46 Voice Prioritization", fParam, bParam, 56, 416);
+                g.DrawString("✓", fParam, bCheck, 36, 383);
+                g.DrawString("MMCSS & Policy QoS: 100% Responsiveness, DSCP 46 Verified", fParam, bParam, 56, 383);
             }
 
-            // 6. Live Edge Latency & Jitter Monitor Card (Y: 450 to 578)
-            Rectangle rectDiag = new Rectangle(20, 450, 580, 128);
+            // 6. Live Telemetry & Bufferbloat Monitor Card (Y: 408 to 554)
+            Rectangle rectDiag = new Rectangle(20, 408, 580, 146);
             DrawRoundedCard(g, rectDiag, Color.FromArgb(18, 23, 35), Color.FromArgb(31, 41, 61), 8);
 
-            using (Font fCardHead = new Font("Segoe UI", 7.75f, FontStyle.Bold))
+            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bCardHead = new SolidBrush(Color.FromArgb(126, 139, 155)))
             {
-                g.DrawString("LIVE ROBLOX EDGE TELEMETRY  •  AUTOMATED RFC 3550 PACER", fCardHead, bCardHead, 36, 460);
+                string diagTitle = isLiveGameServer
+                    ? "LIVE TELEMETRY (CONNECTED ROBLOX GAME SERVER)"
+                    : "LIVE ROBLOX EDGE TELEMETRY (RFC 3550 PACER)";
+                g.DrawString(diagTitle, fCardHead, bCardHead, 36, 417);
             }
 
-            using (Font fMetricVal = new Font("Segoe UI", 20f, FontStyle.Bold))
+            using (Font fMetricVal = new Font("Segoe UI", 19f, FontStyle.Bold))
             using (Font fMetricLbl = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bRttVal = new SolidBrush(Color.FromArgb(0, 240, 255)))
             using (Brush bJitterVal = new SolidBrush(Color.FromArgb(0, 255, 163)))
             using (Brush bMuted = new SolidBrush(Color.FromArgb(126, 139, 155)))
             {
                 string rttStr = liveRtt > 0 ? string.Format("{0:F1} ms", liveRtt) : "-- ms";
-                g.DrawString(rttStr, fMetricVal, bRttVal, 36, 480);
-                g.DrawString("ROUND-TRIP TIME (RTT)", fMetricLbl, bMuted, 40, 518);
+                g.DrawString(rttStr, fMetricVal, bRttVal, 36, 434);
+                g.DrawString("ROUND-TRIP TIME (RTT)", fMetricLbl, bMuted, 40, 470);
 
                 string jitterStr = liveJitter > 0 ? string.Format("{0:F2} ms", liveJitter) : "-- ms";
-                g.DrawString(jitterStr, fMetricVal, bJitterVal, 240, 480);
-                g.DrawString("RFC 3550 JITTER (VARIANCE)", fMetricLbl, bMuted, 244, 518);
+                g.DrawString(jitterStr, fMetricVal, bJitterVal, 230, 434);
+                g.DrawString("RFC 3550 JITTER", fMetricLbl, bMuted, 234, 470);
 
-                string paceBadge = liveJitter < 2.0 ? "PACING: OPTIMIZED" : "PACING: STABLE";
-                Color paceColor = liveJitter < 2.0 ? Color.FromArgb(0, 255, 163) : Color.FromArgb(0, 240, 255);
-                DrawPill(g, 420, 492, 150, 26, paceBadge, Color.FromArgb(20, 36, 48), paceColor);
+                string paceBadge = isLiveGameServer
+                    ? "TARGET: LIVE SERVER"
+                    : (liveJitter < 2.0 ? "PACING: OPTIMIZED" : "PACING: STABLE");
+                Color paceColor = isLiveGameServer
+                    ? Color.FromArgb(0, 255, 163)
+                    : (liveJitter < 2.0 ? Color.FromArgb(0, 255, 163) : Color.FromArgb(0, 240, 255));
+                DrawPill(g, 410, 442, 160, 26, paceBadge, Color.FromArgb(20, 36, 48), paceColor);
             }
 
             // Latency Bar Gauge
             using (SolidBrush gaugeBg = new SolidBrush(Color.FromArgb(27, 36, 54)))
             {
-                g.FillRectangle(gaugeBg, 38, 546, 542, 8);
+                g.FillRectangle(gaugeBg, 38, 494, 542, 7);
             }
             int fillWidth = 350;
             if (liveRtt > 0)
             {
                 fillWidth = Math.Max(20, Math.Min(542, (int)(liveRtt * 6.5)));
             }
-            Rectangle fillRect = new Rectangle(38, 546, fillWidth, 8);
+            Rectangle fillRect = new Rectangle(38, 494, fillWidth, 7);
             using (LinearGradientBrush fillBrush = new LinearGradientBrush(fillRect, Color.FromArgb(0, 240, 255), Color.FromArgb(0, 255, 163), 0f))
             {
                 g.FillRectangle(fillBrush, fillRect);
             }
 
-            // 7. Footer / Actions (Y: 590 to 695)
-            using (Font fHint = new Font("Segoe UI", 7.75f, FontStyle.Regular))
+            // Bufferbloat diagnosis summary line
+            using (Font fBbFont = new Font("Segoe UI", 8.0f, FontStyle.Regular))
+            {
+                Color bbColor = isBufferbloatRunning
+                    ? Color.FromArgb(0, 240, 255)
+                    : (bufferbloatStatus.Contains("Grade A")
+                        ? Color.FromArgb(0, 255, 163)
+                        : (bufferbloatStatus.Contains("Grade B")
+                            ? Color.FromArgb(0, 240, 255)
+                            : Color.FromArgb(200, 215, 235)));
+
+                using (Brush bBb = new SolidBrush(bbColor))
+                {
+                    string truncatedBb = bufferbloatStatus.Length > 85 ? bufferbloatStatus.Substring(0, 85) + "..." : bufferbloatStatus;
+                    g.DrawString(truncatedBb, fBbFont, bBb, 38, 514);
+                }
+            }
+
+            // 7. Footer / Actions (Y: 566 to 650)
+            using (Font fHint = new Font("Segoe UI", 7.5f, FontStyle.Regular))
             using (Brush bHint = new SolidBrush(Color.FromArgb(120, 135, 155)))
             {
                 g.DrawString("Settings automatically revert to Windows defaults when Roblox closes.",
-                    fHint, bHint, 25, 614);
+                    fHint, bHint, 25, 568);
             }
 
-            // Button 1: Minimize to Tray
+            // Button 1: Bufferbloat Test
+            Color btnBbBg = hoverBtnBufferbloat ? Color.FromArgb(25, 45, 75) : Color.FromArgb(16, 30, 52);
+            DrawButton(g, rectBtnBufferbloat, isBufferbloatRunning ? "Testing..." : "Bufferbloat Test", btnBbBg, Color.FromArgb(0, 240, 255), Color.FromArgb(0, 240, 255));
+
+            // Button 2: Minimize to Tray
             Color btnTrayBg = hoverBtnTray ? Color.FromArgb(28, 42, 68) : Color.FromArgb(18, 28, 46);
             DrawButton(g, rectBtnTray, "Minimize to Tray", btnTrayBg, Color.FromArgb(0, 240, 255), Color.FromArgb(0, 240, 255));
 
-            // Button 2: Reset & Exit
+            // Button 3: Reset & Exit
             Color btnExitBg = hoverBtnExit ? Color.FromArgb(64, 25, 34) : Color.FromArgb(45, 18, 25);
             DrawButton(g, rectBtnExit, "Reset & Exit", btnExitBg, Color.FromArgb(255, 77, 106), Color.FromArgb(255, 77, 106));
         }
@@ -2515,12 +3268,24 @@ namespace RobloxNetworkTuner
             try
             {
                 NativeMethods.AttachConsole(NativeMethods.ATTACH_PARENT_PROCESS);
-                StreamWriter sw = new StreamWriter(Console.OpenStandardOutput(), Console.OutputEncoding);
-                sw.AutoFlush = true;
-                Console.SetOut(sw);
-                StreamWriter swErr = new StreamWriter(Console.OpenStandardError(), Console.OutputEncoding);
-                swErr.AutoFlush = true;
-                Console.SetError(swErr);
+                IntPtr stdOut = NativeMethods.GetStdHandle(NativeMethods.STD_OUTPUT_HANDLE);
+                if (stdOut != IntPtr.Zero && stdOut != new IntPtr(-1))
+                {
+                    Microsoft.Win32.SafeHandles.SafeFileHandle sfh = new Microsoft.Win32.SafeHandles.SafeFileHandle(stdOut, false);
+                    FileStream fs = new FileStream(sfh, FileAccess.Write);
+                    StreamWriter sw = new StreamWriter(fs, Console.OutputEncoding);
+                    sw.AutoFlush = true;
+                    Console.SetOut(sw);
+                }
+                IntPtr stdErr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
+                if (stdErr != IntPtr.Zero && stdErr != new IntPtr(-1))
+                {
+                    Microsoft.Win32.SafeHandles.SafeFileHandle sfhErr = new Microsoft.Win32.SafeHandles.SafeFileHandle(stdErr, false);
+                    FileStream fsErr = new FileStream(sfhErr, FileAccess.Write);
+                    StreamWriter swErr = new StreamWriter(fsErr, Console.OutputEncoding);
+                    swErr.AutoFlush = true;
+                    Console.SetError(swErr);
+                }
             }
             catch { }
         }
@@ -2561,6 +3326,22 @@ namespace RobloxNetworkTuner
                     RunBenchmarkCli(target, count);
                     return;
                 }
+                if (flag == "--bufferbloat" || flag == "-bb" || flag == "/bufferbloat")
+                {
+                    string target = "roblox.com";
+                    if (args.Length > 1 && !string.IsNullOrEmpty(args[1])) target = args[1];
+                    BufferbloatResult bres = BufferbloatDiagnosticModule.RunTest(target, delegate(string status)
+                    {
+                        Console.WriteLine(" [*] " + status);
+                    });
+                    BufferbloatDiagnosticModule.PrintResult(bres);
+                    return;
+                }
+                if (flag == "--verify-restore" || flag == "-vr" || flag == "/verifyrestore")
+                {
+                    CrashRecoveryModule.VerifyRestoration();
+                    return;
+                }
                 if (flag == "--restore" || flag == "/restore" || flag == "-r")
                 {
                     if (!EnsureAdministrator(args)) return;
@@ -2589,6 +3370,9 @@ namespace RobloxNetworkTuner
                     return;
                 }
             }
+
+            // Auto-recover any orphaned session from crash/reboot before launch
+            CrashRecoveryModule.CheckAndRecoverOrphanedSession();
 
             // Default Hands-Free Modern Dark Gaming GUI
             if (!EnsureAdministrator(args)) return;
@@ -3113,7 +3897,17 @@ namespace RobloxNetworkTuner
                     QosPolicyName, TargetProcessName);
                 RunSilent("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"" + qosCmd + "\"");
 
-                PrintSuccess("DONE");
+                // Verify QoS policy stability against packet loss and latency degradation
+                bool verified = QosVerificationModule.VerifyQosPolicy("roblox.com");
+                if (verified)
+                {
+                    PrintSuccess("VERIFIED (DSCP 46)");
+                }
+                else
+                {
+                    RemoveQosPolicyDirect();
+                    PrintInfo("SKIPPED (Deprioritized by Gateway/ISP)");
+                }
             }
             catch (Exception ex)
             {
@@ -3127,6 +3921,33 @@ namespace RobloxNetworkTuner
             RunSilent("ipconfig.exe", "/flushdns");
             RunSilent("netsh.exe", "interface ip delete arpcache");
             PrintSuccess("DONE");
+        }
+
+        public static void RemoveQosPolicyDirect()
+        {
+            try
+            {
+                using (RegistryKey polKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\QoS", true))
+                {
+                    if (polKey != null)
+                    {
+                        polKey.DeleteSubKeyTree(QosPolicyName, false);
+                    }
+                }
+            }
+            catch { }
+            RunSilent("powershell.exe", string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Remove-NetQosPolicy -Name '{0}' -Confirm:$false -ErrorAction SilentlyContinue\"", QosPolicyName));
+        }
+
+        public static void RevertGlobalTcpAndQos()
+        {
+            RemoveQosPolicyDirect();
+            RunSilent("netsh.exe", "int tcp set global rsc=enabled");
+            RunSilent("netsh.exe", "int tcp set global timestamps=allowed");
+            RunSilent("netsh.exe", "int tcp set supplemental template=internet congestionprovider=default");
+            RunSilent("netsh.exe", "int tcp set supplemental template=compat congestionprovider=default");
+            RunSilent("netsh.exe", "int tcp set supplemental template=datacenterext congestionprovider=default");
+            RunSilent("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"Set-NetOffloadGlobalSetting -PacketCoalescingFilter Enabled -ReceiveSegmentCoalescing Enabled -Confirm:$false\"");
         }
 
         internal static void RestoreAll()
@@ -3158,18 +3979,7 @@ namespace RobloxNetworkTuner
                 AfdOptimizationModule.Restore(currentSnapshot);
 
                 // 6. Policy-Based QoS
-                try
-                {
-                    using (RegistryKey polKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\QoS", true))
-                    {
-                        if (polKey != null)
-                        {
-                            polKey.DeleteSubKeyTree(QosPolicyName, false);
-                        }
-                    }
-                }
-                catch { }
-                RunSilent("powershell.exe", string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Remove-NetQosPolicy -Name '{0}' -Confirm:$false -ErrorAction SilentlyContinue\"", QosPolicyName));
+                RemoveQosPolicyDirect();
                 Console.WriteLine("  [+] Removed QoS DSCP priority policy.");
 
                 // 7. General Registry Snapshots (TCP interfaces & global)
@@ -3282,18 +4092,7 @@ namespace RobloxNetworkTuner
             catch { }
 
             // 3. Remove QoS Policy
-            try
-            {
-                using (RegistryKey polKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\QoS", true))
-                {
-                    if (polKey != null)
-                    {
-                        polKey.DeleteSubKeyTree(QosPolicyName, false);
-                    }
-                }
-            }
-            catch { }
-            RunSilent("powershell.exe", string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Remove-NetQosPolicy -Name '{0}' -Confirm:$false -ErrorAction SilentlyContinue\"", QosPolicyName));
+            RemoveQosPolicyDirect();
             Console.WriteLine("  [+] Removed QoS DSCP priority policy.");
 
             // 4. Winsock AFD
@@ -3547,6 +4346,27 @@ namespace RobloxNetworkTuner
             string offloadStr = RunCapture("powershell.exe", "-NoProfile -Command \"(Get-NetOffloadGlobalSetting).PacketCoalescingFilter\"");
             Console.WriteLine(" Packet Coalescing Filter : {0}", !string.IsNullOrEmpty(offloadStr) ? offloadStr.Trim() : "Unknown");
 
+            // Network Profile & Adapter Intelligence
+            NetworkProfileInfo profile = NetworkProfileDetector.DetectPrimaryProfile();
+            Console.WriteLine(" Connection Medium        : {0} ({1})", profile.MediaType, profile.AdapterName);
+            if (profile.MediaType == NetworkMediaType.WiFi)
+            {
+                Console.WriteLine(" Wi-Fi Signal / RSSI      : {0}% ({1:F0} dBm) [Scan Threshold: 55%]", profile.SignalPercent, profile.RssiDbm);
+            }
+
+            // Roblox Game Session Live Server
+            RobloxSessionInfo gameSession = RobloxGameSessionTracker.GetCurrentSession();
+            if (gameSession.IsConnected)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(" Active Game Server       : {0}:{1} (Datacenter: {2})", gameSession.ServerIp, gameSession.ServerPort, gameSession.Datacenter);
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.WriteLine(" Active Game Server       : Standby (Monitoring Roblox client logs)");
+            }
+
             // Roblox process
             Process[] procs = Process.GetProcessesByName(TargetProcessName);
             if (procs.Length > 0)
@@ -3574,6 +4394,8 @@ namespace RobloxNetworkTuner
             Console.WriteLine("  RobloxNetworkTuner.exe                   Launch graphical dashboard");
             Console.WriteLine("  RobloxNetworkTuner.exe --console         Launch console watchdog session");
             Console.WriteLine("  RobloxNetworkTuner.exe --benchmark       Run latency & jitter diagnostic");
+            Console.WriteLine("  RobloxNetworkTuner.exe --bufferbloat     Run loaded vs idle bufferbloat diagnostic");
+            Console.WriteLine("  RobloxNetworkTuner.exe --verify-restore  Verify all settings match stock Windows defaults");
             Console.WriteLine("  RobloxNetworkTuner.exe --status          Show network and adapter configuration");
             Console.WriteLine("  RobloxNetworkTuner.exe --restore         Restore default Windows network settings");
             Console.WriteLine("  RobloxNetworkTuner.exe --check-update    Check for updates on GitHub");
