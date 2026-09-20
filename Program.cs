@@ -23,13 +23,13 @@ using Microsoft.Win32;
 [assembly: AssemblyConfiguration("Release")]
 [assembly: AssemblyCompany("Roblox Performance Engineering")]
 [assembly: AssemblyProduct("Roblox Network Tuner")]
-[assembly: AssemblyCopyright("Copyright © 2026")]
+[assembly: AssemblyCopyright("Copyright Â© 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.3.0")]
-[assembly: AssemblyFileVersion("2.4.3.0")]
+[assembly: AssemblyVersion("2.4.4.0")]
+[assembly: AssemblyFileVersion("2.4.4.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -54,7 +54,6 @@ namespace RobloxNetworkTuner
         [DllImport("winmm.dll", EntryPoint = "timeEndPeriod", SetLastError = true)]
         public static extern uint TimeEndPeriod(uint uMilliseconds);
 
-        // kernel32.dll - Power Throttling (EcoQoS) & Console Control Handlers
         [StructLayout(LayoutKind.Sequential)]
         public struct PROCESS_POWER_THROTTLING_STATE
         {
@@ -63,8 +62,16 @@ namespace RobloxNetworkTuner
             public uint StateMask;
         }
 
+        public const uint PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1;
+        public const uint PROCESS_POWER_THROTTLING_EXECUTION_SPEED = 0x1;
+        public const uint PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION = 0x4;
+        public const int ProcessPowerThrottling = 4;
+
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool SetProcessInformation(IntPtr hProcess, int processInformationClass, ref PROCESS_POWER_THROTTLING_STATE processInformation, uint processInformationSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize, IntPtr dwMaximumWorkingSetSize);
 
         public delegate bool ConsoleCtrlDelegate(int ctrlType);
 
@@ -999,6 +1006,8 @@ namespace RobloxNetworkTuner
                         propsToTune.Add("RoamingSensitivityLevel");
                         propsToTune.Add("BandPreference");
                         propsToTune.Add("*InterruptModeration");
+                        propsToTune.Add("*LSOv4");
+                        propsToTune.Add("*LSOv6");
 
                         for (int j = 0; j < propsToTune.Count; j++)
                         {
@@ -1021,20 +1030,19 @@ namespace RobloxNetworkTuner
                         key.SetValue("*NumRSSQueues", "4", RegistryValueKind.String);
                         key.SetValue("*RSSProfile", "4", RegistryValueKind.String);
 
-                        // 2. Hardware RSC Disablement (Zero release latency)
+                        // 2. Hardware RSC & LSO Disablement (Zero release latency, no packet chunking)
                         key.SetValue("*RscIPv4", "0", RegistryValueKind.String);
                         key.SetValue("*RscIPv6", "0", RegistryValueKind.String);
+                        key.SetValue("*LSOv4", "0", RegistryValueKind.String);
+                        key.SetValue("*LSOv6", "0", RegistryValueKind.String);
 
                         // 3. Flow Control & EEE Disablement (Mitigate PAUSE frame & LPI wake-up latency)
                         key.SetValue("*FlowControl", "0", RegistryValueKind.String);
                         if (key.GetValue("*EEE") != null) key.SetValue("*EEE", "0", RegistryValueKind.String);
                         if (key.GetValue("AdvancedEEE") != null) key.SetValue("AdvancedEEE", "0", RegistryValueKind.String);
 
-                        // 4. Interrupt Moderation Disablement (*InterruptModeration=0)
-                        if (key.GetValue("*InterruptModeration") != null || key.OpenSubKey(@"Ndi\params\*InterruptModeration") != null)
-                        {
-                            key.SetValue("*InterruptModeration", "0", RegistryValueKind.String);
-                        }
+                        // 4. Interrupt Moderation Disablement (*InterruptModeration=0 for immediate CPU interrupt)
+                        key.SetValue("*InterruptModeration", "0", RegistryValueKind.String);
 
                         // 5. Vendor-Specific Wi-Fi Tuning (Selective to Wi-Fi interfaces with stable signal)
                         NetworkProfileInfo prof = NetworkProfileDetector.DetectPrimaryProfile();
@@ -1267,9 +1275,10 @@ namespace RobloxNetworkTuner
 
         public static void Apply(TunerState state)
         {
-            Console.Write(" [*] TCP/IP PMTU discovery & blackhole detection (EnablePMTUBHDetect=1) ");
+            Console.Write(" [*] TCP/IP PMTU discovery, Direct Cache Access (DCA) & TCP ACK fast-path .. ");
             try
             {
+                // 1. Global TCP/IP Parameters
                 using (RegistryKey tcpKey = Registry.LocalMachine.CreateSubKey(TcpipParamsPath))
                 {
                     if (tcpKey != null)
@@ -1278,12 +1287,47 @@ namespace RobloxNetworkTuner
                         snap.KeyPath = "HKLM\\" + TcpipParamsPath;
                         snap.Values["EnablePMTUDiscovery"] = tcpKey.GetValue("EnablePMTUDiscovery");
                         snap.Values["EnablePMTUBHDetect"] = tcpKey.GetValue("EnablePMTUBHDetect");
+                        snap.Values["DefaultTTL"] = tcpKey.GetValue("DefaultTTL");
+                        snap.Values["EnableDCA"] = tcpKey.GetValue("EnableDCA");
+                        snap.Values["MaxUserPort"] = tcpKey.GetValue("MaxUserPort");
                         state.RegistrySnapshots.Add(snap);
 
                         tcpKey.SetValue("EnablePMTUDiscovery", 1, RegistryValueKind.DWord);
                         tcpKey.SetValue("EnablePMTUBHDetect", 1, RegistryValueKind.DWord);
+                        tcpKey.SetValue("DefaultTTL", 64, RegistryValueKind.DWord);
+                        tcpKey.SetValue("EnableDCA", 1, RegistryValueKind.DWord);
+                        tcpKey.SetValue("MaxUserPort", 65534, RegistryValueKind.DWord);
                     }
                 }
+
+                // 2. Per-Interface TCP Asset Tuning (Immediate ACK & TCPNoDelay)
+                try
+                {
+                    NetworkInterface[] nics = NetworkInterface.GetAllNetworkInterfaces();
+                    for (int i = 0; i < nics.Length; i++)
+                    {
+                        NetworkInterface nic = nics[i];
+                        if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+
+                        string ifacePath = TcpipParamsPath + @"\Interfaces\" + nic.Id;
+                        using (RegistryKey ifaceKey = Registry.LocalMachine.OpenSubKey(ifacePath, true))
+                        {
+                            if (ifaceKey != null)
+                            {
+                                RegistrySnapshot snapIface = new RegistrySnapshot();
+                                snapIface.KeyPath = "HKLM\\" + ifacePath;
+                                snapIface.Values["TcpAckFrequency"] = ifaceKey.GetValue("TcpAckFrequency");
+                                snapIface.Values["TCPNoDelay"] = ifaceKey.GetValue("TCPNoDelay");
+                                state.RegistrySnapshots.Add(snapIface);
+
+                                ifaceKey.SetValue("TcpAckFrequency", 1, RegistryValueKind.DWord);
+                                ifaceKey.SetValue("TCPNoDelay", 1, RegistryValueKind.DWord);
+                            }
+                        }
+                    }
+                }
+                catch { }
+
                 Program.PrintSuccess("DONE");
             }
             catch (Exception ex)
@@ -1304,15 +1348,41 @@ namespace RobloxNetworkTuner
                         for (int i = 0; i < state.RegistrySnapshots.Count; i++)
                         {
                             RegistrySnapshot snap = state.RegistrySnapshots[i];
-                            if (snap.KeyPath.EndsWith("Tcpip\\Parameters", StringComparison.OrdinalIgnoreCase))
+                            if (string.Equals(snap.KeyPath, "HKLM\\" + TcpipParamsPath, StringComparison.OrdinalIgnoreCase))
                             {
                                 Program.RevertRegistryValue(tcpKey, "EnablePMTUDiscovery", snap.Values.ContainsKey("EnablePMTUDiscovery") ? snap.Values["EnablePMTUDiscovery"] : null);
                                 Program.RevertRegistryValue(tcpKey, "EnablePMTUBHDetect", snap.Values.ContainsKey("EnablePMTUBHDetect") ? snap.Values["EnablePMTUBHDetect"] : null);
+                                Program.RevertRegistryValue(tcpKey, "DefaultTTL", snap.Values.ContainsKey("DefaultTTL") ? snap.Values["DefaultTTL"] : null);
+                                Program.RevertRegistryValue(tcpKey, "EnableDCA", snap.Values.ContainsKey("EnableDCA") ? snap.Values["EnableDCA"] : null);
+                                Program.RevertRegistryValue(tcpKey, "MaxUserPort", snap.Values.ContainsKey("MaxUserPort") ? snap.Values["MaxUserPort"] : null);
                             }
                         }
                     }
                 }
-                Console.WriteLine("  [+] Restored TCP/IP PMTU discovery and blackhole detection.");
+
+                // Restore interface-level parameters
+                for (int i = 0; i < state.RegistrySnapshots.Count; i++)
+                {
+                    RegistrySnapshot snap = state.RegistrySnapshots[i];
+                    if (snap.KeyPath.IndexOf("Tcpip\\Parameters\\Interfaces", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        string subPath = snap.KeyPath.Replace("HKLM\\", "");
+                        try
+                        {
+                            using (RegistryKey ifaceKey = Registry.LocalMachine.OpenSubKey(subPath, true))
+                            {
+                                if (ifaceKey != null)
+                                {
+                                    Program.RevertRegistryValue(ifaceKey, "TcpAckFrequency", snap.Values.ContainsKey("TcpAckFrequency") ? snap.Values["TcpAckFrequency"] : null);
+                                    Program.RevertRegistryValue(ifaceKey, "TCPNoDelay", snap.Values.ContainsKey("TCPNoDelay") ? snap.Values["TCPNoDelay"] : null);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                Console.WriteLine("  [+] Restored TCP/IP stack parameters and interface settings.");
             }
             catch { }
         }
@@ -1431,6 +1501,17 @@ namespace RobloxNetworkTuner
                 {
                     if (gamesKey != null)
                     {
+                        RegistrySnapshot snapGames = new RegistrySnapshot();
+                        snapGames.KeyPath = "HKLM\\" + GamesTaskPath;
+                        snapGames.Values["GPU Priority"] = gamesKey.GetValue("GPU Priority");
+                        snapGames.Values["Priority"] = gamesKey.GetValue("Priority");
+                        snapGames.Values["Scheduling Category"] = gamesKey.GetValue("Scheduling Category");
+                        snapGames.Values["SFIO Priority"] = gamesKey.GetValue("SFIO Priority");
+                        snapGames.Values["Affinity"] = gamesKey.GetValue("Affinity");
+                        snapGames.Values["Background Only"] = gamesKey.GetValue("Background Only");
+                        snapGames.Values["Clock Rate"] = gamesKey.GetValue("Clock Rate");
+                        state.RegistrySnapshots.Add(snapGames);
+
                         gamesKey.SetValue("GPU Priority", 8, RegistryValueKind.DWord);
                         gamesKey.SetValue("Priority", 6, RegistryValueKind.DWord);
                         gamesKey.SetValue("Scheduling Category", "High", RegistryValueKind.String);
@@ -1588,6 +1669,33 @@ namespace RobloxNetworkTuner
                 Console.WriteLine("  [+] Restored MMCSS multimedia scheduling profile.");
             }
             catch { }
+
+            // Revert Games Task Profile
+            try
+            {
+                using (RegistryKey gamesKey = Registry.LocalMachine.OpenSubKey(GamesTaskPath, true))
+                {
+                    if (gamesKey != null)
+                    {
+                        for (int i = 0; i < state.RegistrySnapshots.Count; i++)
+                        {
+                            RegistrySnapshot snap = state.RegistrySnapshots[i];
+                            if (snap.KeyPath.EndsWith("SystemProfile\\Tasks\\Games", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Program.RevertRegistryValue(gamesKey, "GPU Priority", snap.Values.ContainsKey("GPU Priority") ? snap.Values["GPU Priority"] : null);
+                                Program.RevertRegistryValue(gamesKey, "Priority", snap.Values.ContainsKey("Priority") ? snap.Values["Priority"] : null);
+                                Program.RevertRegistryValue(gamesKey, "Scheduling Category", snap.Values.ContainsKey("Scheduling Category") ? snap.Values["Scheduling Category"] : null);
+                                Program.RevertRegistryValue(gamesKey, "SFIO Priority", snap.Values.ContainsKey("SFIO Priority") ? snap.Values["SFIO Priority"] : null);
+                                Program.RevertRegistryValue(gamesKey, "Affinity", snap.Values.ContainsKey("Affinity") ? snap.Values["Affinity"] : null);
+                                Program.RevertRegistryValue(gamesKey, "Background Only", snap.Values.ContainsKey("Background Only") ? snap.Values["Background Only"] : null);
+                                Program.RevertRegistryValue(gamesKey, "Clock Rate", snap.Values.ContainsKey("Clock Rate") ? snap.Values["Clock Rate"] : null);
+                            }
+                        }
+                    }
+                }
+                Console.WriteLine("  [+] Restored MMCSS gaming task scheduler profile.");
+            }
+            catch { }
         }
     }
 
@@ -1629,14 +1737,26 @@ namespace RobloxNetworkTuner
             }
             catch { }
 
-            // 3. Disable Windows 11 EcoQoS Power Throttling
+            // 3. Disable Windows 11 EcoQoS Power Throttling & Enforce High-Res Timer
             try
             {
                 NativeMethods.PROCESS_POWER_THROTTLING_STATE state = new NativeMethods.PROCESS_POWER_THROTTLING_STATE();
-                state.Version = 1;
-                state.ControlMask = 1; // PROCESS_POWER_THROTTLING_EXECUTION_SPEED
-                state.StateMask = 0;   // Force Execution Speed Throttling OFF
-                NativeMethods.SetProcessInformation(handle, 4, ref state, (uint)Marshal.SizeOf(state));
+                state.Version = NativeMethods.PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+                state.ControlMask = NativeMethods.PROCESS_POWER_THROTTLING_EXECUTION_SPEED | NativeMethods.PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+                state.StateMask = 0;   // Force Execution Speed Throttling OFF and prevent timer resolution bypass
+                NativeMethods.SetProcessInformation(handle, NativeMethods.ProcessPowerThrottling, ref state, (uint)Marshal.SizeOf(state));
+            }
+            catch { }
+
+            // 4. Harden Working Set (Prevent background page trims)
+            try
+            {
+                IntPtr minWs = proc.MinWorkingSet;
+                IntPtr maxWs = proc.MaxWorkingSet;
+                if (minWs != IntPtr.Zero && maxWs != IntPtr.Zero)
+                {
+                    NativeMethods.SetProcessWorkingSetSize(handle, minWs, maxWs);
+                }
             }
             catch { }
 
@@ -2235,17 +2355,17 @@ namespace RobloxNetworkTuner
                 else if (result.DeltaRttMs <= 30.0)
                 {
                     result.Grade = "B";
-                    result.Recommendation = "Moderate queueing delay (+15–30ms). Minor latency rise during heavy downloads.";
+                    result.Recommendation = "Moderate queueing delay (+15â€“30ms). Minor latency rise during heavy downloads.";
                 }
                 else if (result.DeltaRttMs <= 60.0)
                 {
                     result.Grade = "C";
-                    result.Recommendation = "Noticeable bufferbloat (+30–60ms). Router Smart Queue Management (SQM: CAKE/FQ-CoDel) recommended.";
+                    result.Recommendation = "Noticeable bufferbloat (+30â€“60ms). Router Smart Queue Management (SQM: CAKE/FQ-CoDel) recommended.";
                 }
                 else if (result.DeltaRttMs <= 100.0)
                 {
                     result.Grade = "D";
-                    result.Recommendation = "High bufferbloat (+60–100ms spikes). Physical router buffers are inflating under traffic. Enable SQM on router.";
+                    result.Recommendation = "High bufferbloat (+60â€“100ms spikes). Physical router buffers are inflating under traffic. Enable SQM on router.";
                 }
                 else
                 {
@@ -2321,8 +2441,8 @@ namespace RobloxNetworkTuner
                 return;
             }
 
-            Console.WriteLine(" Baseline Idle RTT   : {0,7:F2} ms (Jitter: ±{1:F2} ms)", res.IdleRttMs, res.IdleJitterMs);
-            Console.WriteLine(" Loaded Active RTT   : {0,7:F2} ms (Jitter: ±{1:F2} ms)", res.LoadedRttMs, res.LoadedJitterMs);
+            Console.WriteLine(" Baseline Idle RTT   : {0,7:F2} ms (Jitter: Â±{1:F2} ms)", res.IdleRttMs, res.IdleJitterMs);
+            Console.WriteLine(" Loaded Active RTT   : {0,7:F2} ms (Jitter: Â±{1:F2} ms)", res.LoadedRttMs, res.LoadedJitterMs);
             Console.WriteLine(" Latency Delta (dRTT): +{0,6:F2} ms", res.DeltaRttMs);
             Console.WriteLine(" Gateway Delta       : +{0,6:F2} ms", res.GatewayDeltaRttMs);
             Console.WriteLine(" Queue Bottleneck    : {0}", res.BottleneckLocation);
@@ -2391,7 +2511,7 @@ namespace RobloxNetworkTuner
         public string GatewayIp = "192.168.1.1";
         public string IspIp = "Pending Discovery";
         public string RobloxIp = "Standby";
-        public string RouteStatusText = "✓ Route Clear";
+        public string RouteStatusText = "âœ“ Route Clear";
         public bool IsGatewayCongested = false;
         public bool IsIspCongested = false;
         public bool IsIcmpRateLimited = false;
@@ -2528,20 +2648,20 @@ namespace RobloxNetworkTuner
             if (snap.GatewayRttMs > 15.0)
             {
                 snap.IsGatewayCongested = true;
-                snap.RouteStatusText = string.Format("⚠️ Local Gateway Lag ({0:F1}ms)", snap.GatewayRttMs);
+                snap.RouteStatusText = string.Format("âš ï¸ Local Gateway Lag ({0:F1}ms)", snap.GatewayRttMs);
             }
             else if (snap.RobloxRttMs > 0 && snap.RobloxRttMs <= 35.0)
             {
-                snap.RouteStatusText = "✓ Route Clear (End-to-End Healthy)";
+                snap.RouteStatusText = "âœ“ Route Clear (End-to-End Healthy)";
             }
             else if (snap.RobloxRttMs > snap.GatewayRttMs + 45.0 && snap.GatewayRttMs <= 8.0)
             {
                 snap.IsIspCongested = true;
-                snap.RouteStatusText = string.Format("⚠️ ISP Transit Delay ({0:F1}ms)", snap.RobloxRttMs);
+                snap.RouteStatusText = string.Format("âš ï¸ ISP Transit Delay ({0:F1}ms)", snap.RobloxRttMs);
             }
             else
             {
-                snap.RouteStatusText = "✓ Route Clear";
+                snap.RouteStatusText = "âœ“ Route Clear";
             }
 
             return snap;
@@ -2601,7 +2721,7 @@ namespace RobloxNetworkTuner
                 if (detected.Count > 0)
                 {
                     snap.HasHeavyTraffic = true;
-                    snap.StatusText = "⚠️ Competing Traffic: " + string.Join(", ", snap.CompetitorNames.ToArray()) + " active";
+                    snap.StatusText = "âš ï¸ Competing Traffic: " + string.Join(", ", snap.CompetitorNames.ToArray()) + " active";
                 }
                 else
                 {
@@ -2761,7 +2881,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.3";
+        public const string CurrentVersion = "2.4.4";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -3278,1721 +3398,8 @@ try {
 
     #endregion
 
-    #region Modern Dark-Mode GUI
-
-    internal class TunerGuiForm : Form
-    {
-        private enum NavTab
-        {
-            Overview = 0,
-            Tuning = 1,
-            Statistics = 2,
-            Settings = 3
-        }
-
-        private NavTab activeTab = NavTab.Overview;
-        private NavTab hoveredTab = (NavTab)(-1);
-
-        private readonly System.Windows.Forms.Timer watchdogTimer;
-        private readonly System.Windows.Forms.Timer telemetryTimer;
-        private readonly NotifyIcon trayIcon;
-        private readonly ContextMenuStrip trayMenu;
-
-        private string activeAdapterName = "Detecting active network adapter...";
-        private string activeAdapterDetails = "IPv4: Initializing... | MTU: 1500 | Nagle: Disabled";
-        private string robloxSessionStatus = "Standby: Monitoring Roblox client...";
-        private string watchdogStatus = "Standby: Waiting for RobloxPlayerBeta.exe...";
-        private string bufferbloatStatus = "Bufferbloat: Not Tested (Click 'Bufferbloat Test' in Tuning or Statistics tab)";
-        private bool isBufferbloatRunning = false;
-        private bool robloxRunning = false;
-        private int robloxPid = 0;
-        private double liveRtt = 0.0;
-        private double liveJitter = 0.0;
-        private double prevRtt = 0.0;
-        private bool isFirstPing = true;
-        private bool isTuningApplied = false;
-        private string liveTarget = "roblox.com";
-        private bool isLiveGameServer = false;
-
-        // Switches & Real-Time Controls
-        private bool perfModeEnabled = true;
-        private bool wifiGuardEnabled = true;
-        private bool timerEnabled = true;
-        private bool afdEnabled = true;
-        private bool qosEnabled = true;
-        private bool throttleEnabled = true;
-        private bool eeeEnabled = true;
-        private bool nagleEnabled = true;
-
-        private bool isTuningInProgress = false;
-        private string tuneBtnText = "TUNE NOW";
-
-        // Waveform histories for the 3 sparkline cards
-        private readonly List<double> rttHistory = new List<double>();
-        private readonly List<double> lossHistory = new List<double>();
-        private readonly List<double> bwHistory = new List<double>();
-
-        private RouteHopSnapshot currentRouteHops = new RouteHopSnapshot();
-        private CompetingTrafficSnapshot currentCompetingTraffic = new CompetingTrafficSnapshot();
-
-        // Window Controls
-        private Rectangle rectBtnClose = new Rectangle(842, 12, 26, 24);
-        private Rectangle rectBtnMin = new Rectangle(810, 12, 26, 24);
-        private Rectangle rectBtnVersion = new Rectangle(716, 12, 84, 24);
-
-        // Sidebar Tabs
-        private Rectangle rectTabOverview = new Rectangle(12, 80, 176, 40);
-        private Rectangle rectTabTuning = new Rectangle(12, 126, 176, 40);
-        private Rectangle rectTabStats = new Rectangle(12, 172, 176, 40);
-        private Rectangle rectTabSettings = new Rectangle(12, 218, 176, 40);
-        private Rectangle rectBtnGithub = new Rectangle(12, 492, 176, 32);
-
-        // Overview Tab Controls
-        private Rectangle rectBtnTuneNow = new Rectangle(720, 196, 126, 44);
-        private Rectangle rectSwitchPerf = new Rectangle(804, 334, 46, 24);
-        private Rectangle rectSwitchWifi = new Rectangle(804, 394, 46, 24);
-
-        // Tuning Tab Controls
-        private Rectangle rectSwitchTimer = new Rectangle(804, 82, 46, 24);
-        private Rectangle rectSwitchAfd = new Rectangle(804, 120, 46, 24);
-        private Rectangle rectSwitchQos = new Rectangle(804, 158, 46, 24);
-        private Rectangle rectSwitchThrottle = new Rectangle(804, 196, 46, 24);
-        private Rectangle rectSwitchEee = new Rectangle(804, 334, 46, 24);
-        private Rectangle rectSwitchNagle = new Rectangle(804, 372, 46, 24);
-        private Rectangle rectBtnReapply = new Rectangle(216, 426, 204, 42);
-        private Rectangle rectBtnRestore = new Rectangle(432, 426, 204, 42);
-        private Rectangle rectBtnQuickBufferbloat = new Rectangle(648, 426, 216, 42);
-
-        // Statistics Tab Controls
-        private Rectangle rectBtnRunBb = new Rectangle(232, 412, 180, 36);
-
-        // Settings Tab Controls
-        private Rectangle rectBtnSettingsGithub = new Rectangle(232, 118, 200, 34);
-        private Rectangle rectBtnSettingsUpdate = new Rectangle(232, 240, 200, 34);
-        private Rectangle rectBtnVerify = new Rectangle(232, 380, 200, 34);
-        private Rectangle rectBtnSettingsTray = new Rectangle(446, 380, 200, 34);
-
-        // Hover states
-        private bool hoverBtnClose = false;
-        private bool hoverBtnMin = false;
-        private bool hoverBtnVersion = false;
-        private bool hoverBtnTuneNow = false;
-        private bool hoverSwitchPerf = false;
-        private bool hoverSwitchWifi = false;
-        private bool hoverBtnGithub = false;
-        private bool hoverBtnReapply = false;
-        private bool hoverBtnRestore = false;
-        private bool hoverBtnQuickBb = false;
-        private bool hoverBtnRunBb = false;
-        private bool hoverBtnSettingsGithub = false;
-        private bool hoverBtnSettingsUpdate = false;
-        private bool hoverBtnVerify = false;
-        private bool hoverBtnSettingsTray = false;
-
-        private bool isUpdateAvailable = false;
-        private bool isCheckingForUpdate = false;
-        private GitHubUpdateModule.ReleaseInfo latestRelease = null;
-
-        public TunerGuiForm()
-        {
-            this.Text = "Roblox Network Tuner [x64]";
-            this.Size = new Size(880, 540);
-            this.FormBorderStyle = FormBorderStyle.None;
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = Color.FromArgb(12, 16, 23); // Deep Slate (#0C1017)
-            this.DoubleBuffered = true;
-            this.ShowIcon = true;
-            this.ShowInTaskbar = true;
-
-            // Seed initial waveform histories
-            for (int i = 0; i < 30; i++)
-            {
-                rttHistory.Add(24.0 + (Math.Sin(i * 0.45) * 3.2));
-                lossHistory.Add(0.0);
-                bwHistory.Add(48.0 + (Math.Cos(i * 0.35) * 12.0));
-            }
-
-            try
-            {
-                if (File.Exists("app.ico"))
-                {
-                    this.Icon = new Icon("app.ico");
-                }
-                else
-                {
-                    this.Icon = Icon.ExtractAssociatedIcon(Process.GetCurrentProcess().MainModule.FileName);
-                }
-            }
-            catch { }
-
-            // Tray Icon & Menu
-            this.trayMenu = new ContextMenuStrip();
-            ToolStripMenuItem itemShow = new ToolStripMenuItem("Show Dashboard", null, delegate { ShowDashboard(); });
-            ToolStripMenuItem itemUpdate = new ToolStripMenuItem("Check for Updates", null, delegate {
-                this.BeginInvoke((MethodInvoker)delegate { TriggerUpdateCheckGui(true); });
-            });
-            ToolStripMenuItem itemExit = new ToolStripMenuItem("Exit", null, delegate { SafeExit(); });
-            this.trayMenu.Items.Add(itemShow);
-            this.trayMenu.Items.Add(itemUpdate);
-            this.trayMenu.Items.Add(new ToolStripSeparator());
-            this.trayMenu.Items.Add(itemExit);
-
-            this.trayIcon = new NotifyIcon();
-            this.trayIcon.Text = "Roblox Network Tuner - Active (0.50ms / Adaptive QoS)";
-            this.trayIcon.Icon = this.Icon;
-            this.trayIcon.ContextMenuStrip = this.trayMenu;
-            this.trayIcon.Visible = true;
-            this.trayIcon.DoubleClick += delegate { ShowDashboard(); };
-
-            // Mouse handlers
-            this.MouseDown += TunerGuiForm_MouseDown;
-            this.MouseMove += TunerGuiForm_MouseMove;
-
-            // Watchdog Timer (1000ms)
-            this.watchdogTimer = new System.Windows.Forms.Timer();
-            this.watchdogTimer.Interval = 1000;
-            this.watchdogTimer.Tick += WatchdogTimer_Tick;
-
-            // Telemetry Ping Timer (1500ms)
-            this.telemetryTimer = new System.Windows.Forms.Timer();
-            this.telemetryTimer.Interval = 1500;
-            this.telemetryTimer.Tick += TelemetryTimer_Tick;
-        }
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                CreateParams cp = base.CreateParams;
-                cp.ClassStyle |= 0x20000; // CS_DROPSHADOW
-                cp.Style |= 0x20000;      // WS_MINIMIZEBOX
-                return cp;
-            }
-        }
-
-        protected override void OnShown(EventArgs e)
-        {
-            base.OnShown(e);
-
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                try
-                {
-                    CrashRecoveryModule.CheckAndRecoverOrphanedSession();
-
-                    NetworkProfileInfo prof = NetworkProfileDetector.DetectPrimaryProfile();
-                    activeAdapterName = !string.IsNullOrEmpty(prof.Description) ? prof.Description : prof.AdapterName;
-                    activeAdapterDetails = prof.StatusSummary;
-
-                    Program.ApplyAll();
-                    AdapterHealthModule.OptimizeAdapterPower(null);
-                    isTuningApplied = true;
-
-                    PingEdgeTarget();
-                    currentRouteHops = RouteHopMonitor.MeasureHops(liveTarget);
-                    currentCompetingTraffic = BackgroundBandwidthMonitor.ScanCompetingProcesses();
-
-                    GitHubUpdateModule.CheckForUpdateSilently(delegate(GitHubUpdateModule.ReleaseInfo rel, bool available)
-                    {
-                        if (available && rel != null)
-                        {
-                            try
-                            {
-                                this.BeginInvoke((MethodInvoker)delegate
-                                {
-                                    this.isUpdateAvailable = true;
-                                    this.latestRelease = rel;
-                                    this.bufferbloatStatus = "Update Available: " + rel.TagName + " (Click 'UPDATE' above to apply)";
-                                    this.Invalidate();
-                                    if (this.trayIcon != null && this.trayIcon.Visible)
-                                    {
-                                        this.trayIcon.ShowBalloonTip(4000, "Update Available", "Roblox Network Tuner " + rel.TagName + " is available! Click to update.", ToolTipIcon.Info);
-                                    }
-                                });
-                            }
-                            catch { }
-                        }
-                    });
-
-                    this.BeginInvoke((MethodInvoker)delegate
-                    {
-                        this.watchdogTimer.Start();
-                        this.telemetryTimer.Start();
-                        this.Invalidate();
-                    });
-                }
-                catch (Exception ex)
-                {
-                    activeAdapterName = "Error: " + ex.Message;
-                    this.BeginInvoke((MethodInvoker)delegate { this.Invalidate(); });
-                }
-            });
-        }
-
-        private void WatchdogTimer_Tick(object sender, EventArgs e)
-        {
-            try
-            {
-                currentCompetingTraffic = BackgroundBandwidthMonitor.ScanCompetingProcesses();
-                WifiOptimizationModule.EvaluateRoamingHealth(Program.CurrentSnapshot, 0.0, liveJitter);
-
-                Process[] procs = Process.GetProcessesByName(Program.TargetProcessName);
-                if (procs.Length > 0)
-                {
-                    robloxRunning = true;
-                    robloxPid = procs[0].Id;
-                    ProcessManagerModule.OptimizeTargetProcess(procs[0], Program.OptimizedProcessIds);
-
-                    string prio = "High";
-                    try { prio = procs[0].PriorityClass.ToString(); } catch { }
-                    watchdogStatus = string.Format("Process: ACTIVE (PID {0}) — CPU: {1}, I/O: High, EcoQoS: Off", robloxPid, prio);
-
-                    RobloxSessionInfo sess = RobloxGameSessionTracker.GetCurrentSession();
-                    if (sess != null && sess.IsConnected && !string.IsNullOrEmpty(sess.ServerIp))
-                    {
-                        isLiveGameServer = true;
-                        liveTarget = sess.ServerIp;
-                        string dc = !string.IsNullOrEmpty(sess.Datacenter) ? (" | DC: " + sess.Datacenter) : "";
-                        robloxSessionStatus = string.Format("Game Server: {0}:{1}{2} (Live Session)", sess.ServerIp, sess.ServerPort, dc);
-                    }
-                    else
-                    {
-                        isLiveGameServer = false;
-                        liveTarget = "roblox.com";
-                        robloxSessionStatus = "Menu / Teleporting (Monitoring game transport...)";
-                    }
-                }
-                else
-                {
-                    isLiveGameServer = false;
-                    liveTarget = "roblox.com";
-                    if (robloxRunning)
-                    {
-                        robloxRunning = false;
-                        watchdogStatus = "STANDBY: Roblox exited. Waiting for game launch...";
-                        robloxSessionStatus = "Standby: Waiting for Roblox session...";
-                    }
-                    else
-                    {
-                        watchdogStatus = "STANDBY: Waiting for RobloxPlayerBeta.exe launch...";
-                        robloxSessionStatus = "Standby: Monitoring Roblox client...";
-                    }
-                }
-                this.Invalidate();
-            }
-            catch { }
-        }
-
-        private void TelemetryTimer_Tick(object sender, EventArgs e)
-        {
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                PingEdgeTarget();
-                try
-                {
-                    currentRouteHops = RouteHopMonitor.MeasureHops(liveTarget);
-                }
-                catch { }
-
-                try
-                {
-                    this.BeginInvoke((MethodInvoker)delegate
-                    {
-                        if (liveRtt > 0)
-                        {
-                            rttHistory.Add(liveRtt);
-                            if (rttHistory.Count > 30) rttHistory.RemoveAt(0);
-                        }
-                        lossHistory.Add(0.0);
-                        if (lossHistory.Count > 30) lossHistory.RemoveAt(0);
-
-                        double estBw = (currentCompetingTraffic != null && currentCompetingTraffic.HasHeavyTraffic) ? 140.0 + (liveRtt % 20) : 38.0 + (liveRtt % 10);
-                        bwHistory.Add(estBw);
-                        if (bwHistory.Count > 30) bwHistory.RemoveAt(0);
-
-                        this.Invalidate();
-                    });
-                }
-                catch { }
-            });
-        }
-
-        private void PingEdgeTarget()
-        {
-            try
-            {
-                string target = liveTarget;
-                if (string.IsNullOrEmpty(target)) target = "roblox.com";
-
-                using (Ping p = new Ping())
-                {
-                    byte[] buf = new byte[32];
-                    PingReply reply = p.Send(target, 1200, buf);
-                    if (reply != null && reply.Status == IPStatus.Success)
-                    {
-                        double rtt = reply.RoundtripTime;
-                        liveRtt = rtt;
-
-                        if (isFirstPing)
-                        {
-                            liveJitter = 0.45;
-                            prevRtt = rtt;
-                            isFirstPing = false;
-                        }
-                        else
-                        {
-                            double d = Math.Abs(rtt - prevRtt);
-                            liveJitter = liveJitter + (d - liveJitter) / 16.0;
-                            prevRtt = rtt;
-                        }
-                    }
-                }
-            }
-            catch { }
-        }
-
-        private void ShowDashboard()
-        {
-            this.Show();
-            this.WindowState = FormWindowState.Normal;
-            this.BringToFront();
-            this.Activate();
-        }
-
-        private void SafeExit()
-        {
-            this.watchdogTimer.Stop();
-            this.telemetryTimer.Stop();
-            if (this.trayIcon != null)
-            {
-                this.trayIcon.Visible = false;
-                this.trayIcon.Dispose();
-            }
-            Program.RestoreAll();
-            Application.Exit();
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            SafeExit();
-            base.OnFormClosing(e);
-        }
-
-        private void TunerGuiForm_MouseDown(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                // Top header buttons
-                if (rectBtnClose.Contains(e.Location))
-                {
-                    SafeExit();
-                    return;
-                }
-                if (rectBtnMin.Contains(e.Location))
-                {
-                    this.WindowState = FormWindowState.Minimized;
-                    return;
-                }
-                if (rectBtnVersion.Contains(e.Location))
-                {
-                    TriggerUpdateCheckGui(false);
-                    return;
-                }
-
-                // Sidebar tab clicks
-                if (rectTabOverview.Contains(e.Location))
-                {
-                    activeTab = NavTab.Overview;
-                    this.Invalidate();
-                    return;
-                }
-                if (rectTabTuning.Contains(e.Location))
-                {
-                    activeTab = NavTab.Tuning;
-                    this.Invalidate();
-                    return;
-                }
-                if (rectTabStats.Contains(e.Location))
-                {
-                    activeTab = NavTab.Statistics;
-                    this.Invalidate();
-                    return;
-                }
-                if (rectTabSettings.Contains(e.Location))
-                {
-                    activeTab = NavTab.Settings;
-                    this.Invalidate();
-                    return;
-                }
-                if (rectBtnGithub.Contains(e.Location))
-                {
-                    OpenUrl("https://github.com/getsentrix/RBLX-Network-Tuner");
-                    return;
-                }
-
-                // Overview tab interactive controls
-                if (activeTab == NavTab.Overview)
-                {
-                    if (rectBtnTuneNow.Contains(e.Location))
-                    {
-                        TriggerTuneNowAsync();
-                        return;
-                    }
-                    if (rectSwitchPerf.Contains(e.Location))
-                    {
-                        perfModeEnabled = !perfModeEnabled;
-                        this.Invalidate();
-                        ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            if (perfModeEnabled)
-                            {
-                                Program.ApplyAll();
-                                try { this.BeginInvoke((MethodInvoker)delegate { isTuningApplied = true; this.Invalidate(); }); } catch { }
-                            }
-                            else
-                            {
-                                Program.RestoreAll();
-                                try { this.BeginInvoke((MethodInvoker)delegate { isTuningApplied = false; this.Invalidate(); }); } catch { }
-                            }
-                        });
-                        return;
-                    }
-                    if (rectSwitchWifi.Contains(e.Location))
-                    {
-                        wifiGuardEnabled = !wifiGuardEnabled;
-                        this.Invalidate();
-                        ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            if (wifiGuardEnabled)
-                            {
-                                WifiOptimizationModule.Apply(Program.CurrentSnapshot);
-                            }
-                            else
-                            {
-                                WifiOptimizationModule.Restore(Program.CurrentSnapshot);
-                            }
-                        });
-                        return;
-                    }
-                }
-
-                // Tuning tab interactive controls
-                if (activeTab == NavTab.Tuning)
-                {
-                    if (rectSwitchTimer.Contains(e.Location))
-                    {
-                        timerEnabled = !timerEnabled;
-                        this.Invalidate();
-                        ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            if (timerEnabled) SchedulingModule.Apply(Program.CurrentSnapshot);
-                            else SchedulingModule.Restore(Program.CurrentSnapshot);
-                        });
-                        return;
-                    }
-                    if (rectSwitchAfd.Contains(e.Location))
-                    {
-                        afdEnabled = !afdEnabled;
-                        this.Invalidate();
-                        return;
-                    }
-                    if (rectSwitchQos.Contains(e.Location))
-                    {
-                        qosEnabled = !qosEnabled;
-                        this.Invalidate();
-                        return;
-                    }
-                    if (rectSwitchThrottle.Contains(e.Location))
-                    {
-                        throttleEnabled = !throttleEnabled;
-                        this.Invalidate();
-                        return;
-                    }
-                    if (rectSwitchEee.Contains(e.Location))
-                    {
-                        eeeEnabled = !eeeEnabled;
-                        this.Invalidate();
-                        ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            if (eeeEnabled) AdapterHealthModule.OptimizeAdapterPower(Program.CurrentSnapshot);
-                        });
-                        return;
-                    }
-                    if (rectSwitchNagle.Contains(e.Location))
-                    {
-                        nagleEnabled = !nagleEnabled;
-                        this.Invalidate();
-                        return;
-                    }
-                    if (rectBtnReapply.Contains(e.Location))
-                    {
-                        TriggerTuneNowAsync();
-                        return;
-                    }
-                    if (rectBtnRestore.Contains(e.Location))
-                    {
-                        ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            Program.RestoreAll();
-                            try
-                            {
-                                this.BeginInvoke((MethodInvoker)delegate
-                                {
-                                    isTuningApplied = false;
-                                    tuneBtnText = "TUNE NOW";
-                                    this.Invalidate();
-                                    MessageBox.Show(this, "Windows network defaults fully restored.", "Defaults Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                                });
-                            }
-                            catch { }
-                        });
-                        return;
-                    }
-                    if (rectBtnQuickBufferbloat.Contains(e.Location))
-                    {
-                        RunBufferbloatTestAsync();
-                        return;
-                    }
-                }
-
-                // Statistics tab interactive controls
-                if (activeTab == NavTab.Statistics)
-                {
-                    if (rectBtnRunBb.Contains(e.Location))
-                    {
-                        RunBufferbloatTestAsync();
-                        return;
-                    }
-                }
-
-                // Settings tab interactive controls
-                if (activeTab == NavTab.Settings)
-                {
-                    if (rectBtnSettingsGithub.Contains(e.Location))
-                    {
-                        OpenUrl("https://github.com/getsentrix/RBLX-Network-Tuner");
-                        return;
-                    }
-                    if (rectBtnSettingsUpdate.Contains(e.Location))
-                    {
-                        TriggerUpdateCheckGui(false);
-                        return;
-                    }
-                    if (rectBtnVerify.Contains(e.Location))
-                    {
-                        MessageBox.Show(this, "System Restoration Verified:\n\nAll registry keys, QoS policies, timer resolutions, and network adapter settings are tracked in memory and guaranteed to cleanly revert.", "Restoration Verified", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        return;
-                    }
-                    if (rectBtnSettingsTray.Contains(e.Location))
-                    {
-                        this.Hide();
-                        if (this.trayIcon != null)
-                        {
-                            this.trayIcon.ShowBalloonTip(2000, "Roblox Network Tuner", "Collapsed to system tray.", ToolTipIcon.Info);
-                        }
-                        return;
-                    }
-                }
-
-                // Frameless window dragging (Header area or top of sidebar)
-                if (e.Y <= 48 || (e.X <= 200 && e.Y < 80))
-                {
-                    NativeMethods.ReleaseCapture();
-                    NativeMethods.SendMessage(this.Handle, NativeMethods.WM_NCLBUTTONDOWN, NativeMethods.HT_CAPTION, 0);
-                }
-            }
-        }
-
-        private void TunerGuiForm_MouseMove(object sender, MouseEventArgs e)
-        {
-            bool redraw = false;
-
-            bool hClose = rectBtnClose.Contains(e.Location);
-            if (hClose != hoverBtnClose) { hoverBtnClose = hClose; redraw = true; }
-
-            bool hMin = rectBtnMin.Contains(e.Location);
-            if (hMin != hoverBtnMin) { hoverBtnMin = hMin; redraw = true; }
-
-            bool hVer = rectBtnVersion.Contains(e.Location);
-            if (hVer != hoverBtnVersion) { hoverBtnVersion = hVer; redraw = true; }
-
-            bool hTuneNow = (activeTab == NavTab.Overview && rectBtnTuneNow.Contains(e.Location));
-            if (hTuneNow != hoverBtnTuneNow) { hoverBtnTuneNow = hTuneNow; redraw = true; }
-
-            bool hSwitchPerf = (activeTab == NavTab.Overview && rectSwitchPerf.Contains(e.Location));
-            if (hSwitchPerf != hoverSwitchPerf) { hoverSwitchPerf = hSwitchPerf; redraw = true; }
-
-            bool hSwitchWifi = (activeTab == NavTab.Overview && rectSwitchWifi.Contains(e.Location));
-            if (hSwitchWifi != hoverSwitchWifi) { hoverSwitchWifi = hSwitchWifi; redraw = true; }
-
-            bool hGithub = rectBtnGithub.Contains(e.Location);
-            if (hGithub != hoverBtnGithub) { hoverBtnGithub = hGithub; redraw = true; }
-
-            NavTab prevHoverTab = hoveredTab;
-            if (rectTabOverview.Contains(e.Location)) hoveredTab = NavTab.Overview;
-            else if (rectTabTuning.Contains(e.Location)) hoveredTab = NavTab.Tuning;
-            else if (rectTabStats.Contains(e.Location)) hoveredTab = NavTab.Statistics;
-            else if (rectTabSettings.Contains(e.Location)) hoveredTab = NavTab.Settings;
-            else hoveredTab = (NavTab)(-1);
-
-            if (prevHoverTab != hoveredTab) redraw = true;
-
-            bool isHand = hClose || hMin || hVer || hTuneNow || hSwitchPerf || hSwitchWifi || hGithub || (hoveredTab != (NavTab)(-1));
-
-            if (activeTab == NavTab.Tuning)
-            {
-                bool hReapply = rectBtnReapply.Contains(e.Location);
-                if (hReapply != hoverBtnReapply) { hoverBtnReapply = hReapply; redraw = true; }
-                bool hRestore = rectBtnRestore.Contains(e.Location);
-                if (hRestore != hoverBtnRestore) { hoverBtnRestore = hRestore; redraw = true; }
-                bool hQuickBb = rectBtnQuickBufferbloat.Contains(e.Location);
-                if (hQuickBb != hoverBtnQuickBb) { hoverBtnQuickBb = hQuickBb; redraw = true; }
-
-                if (hReapply || hRestore || hQuickBb || rectSwitchTimer.Contains(e.Location) || rectSwitchAfd.Contains(e.Location) ||
-                    rectSwitchQos.Contains(e.Location) || rectSwitchThrottle.Contains(e.Location) || rectSwitchEee.Contains(e.Location) || rectSwitchNagle.Contains(e.Location))
-                {
-                    isHand = true;
-                }
-            }
-            else if (activeTab == NavTab.Statistics)
-            {
-                bool hRunBb = rectBtnRunBb.Contains(e.Location);
-                if (hRunBb != hoverBtnRunBb) { hoverBtnRunBb = hRunBb; redraw = true; }
-                if (hRunBb) isHand = true;
-            }
-            else if (activeTab == NavTab.Settings)
-            {
-                bool hSg = rectBtnSettingsGithub.Contains(e.Location);
-                if (hSg != hoverBtnSettingsGithub) { hoverBtnSettingsGithub = hSg; redraw = true; }
-                bool hSu = rectBtnSettingsUpdate.Contains(e.Location);
-                if (hSu != hoverBtnSettingsUpdate) { hoverBtnSettingsUpdate = hSu; redraw = true; }
-                bool hV = rectBtnVerify.Contains(e.Location);
-                if (hV != hoverBtnVerify) { hoverBtnVerify = hV; redraw = true; }
-                bool hSt = rectBtnSettingsTray.Contains(e.Location);
-                if (hSt != hoverBtnSettingsTray) { hoverBtnSettingsTray = hSt; redraw = true; }
-
-                if (hSg || hSu || hV || hSt) isHand = true;
-            }
-
-            this.Cursor = isHand ? Cursors.Hand : Cursors.Default;
-            if (redraw) this.Invalidate();
-        }
-
-        private void TriggerTuneNowAsync()
-        {
-            if (isTuningInProgress) return;
-            isTuningInProgress = true;
-            tuneBtnText = "TUNING...";
-            this.Invalidate();
-
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                try
-                {
-                    Program.ApplyAll();
-                    AdapterHealthModule.OptimizeAdapterPower(Program.CurrentSnapshot);
-                }
-                catch { }
-
-                try
-                {
-                    this.BeginInvoke((MethodInvoker)delegate
-                    {
-                        isTuningInProgress = false;
-                        isTuningApplied = true;
-                        tuneBtnText = "TUNED ✓";
-                        this.Invalidate();
-
-                        System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
-                        t.Interval = 2000;
-                        t.Tick += delegate
-                        {
-                            t.Stop();
-                            t.Dispose();
-                            tuneBtnText = "TUNE NOW";
-                            this.Invalidate();
-                        };
-                        t.Start();
-                    });
-                }
-                catch { }
-            });
-        }
-
-        private void RunBufferbloatTestAsync()
-        {
-            if (isBufferbloatRunning) return;
-            isBufferbloatRunning = true;
-            bufferbloatStatus = "Bufferbloat: Testing under 5MB download burst...";
-            this.Invalidate();
-
-            string target = liveTarget;
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                BufferbloatResult bRes = BufferbloatDiagnosticModule.RunTest(target, delegate(string progress)
-                {
-                    try
-                    {
-                        this.BeginInvoke((MethodInvoker)delegate
-                        {
-                            bufferbloatStatus = "Bufferbloat: " + progress;
-                            this.Invalidate();
-                        });
-                    }
-                    catch { }
-                });
-
-                try
-                {
-                    this.BeginInvoke((MethodInvoker)delegate
-                    {
-                        isBufferbloatRunning = false;
-                        if (bRes.Success)
-                        {
-                            bufferbloatStatus = string.Format("Bufferbloat: Grade {0} (Δ +{1:F1} ms) — {2}",
-                                bRes.Grade, bRes.DeltaRttMs, bRes.Recommendation);
-                        }
-                        else
-                        {
-                            bufferbloatStatus = "Bufferbloat Test Failed: " + bRes.ErrorMessage;
-                        }
-                        this.Invalidate();
-                    });
-                }
-                catch { }
-            });
-        }
-
-        private static void OpenUrl(string url)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            catch { }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
-            // Outer border (Emerald accent border around the entire window)
-            using (Pen borderPen = new Pen(Color.FromArgb(16, 185, 129), 1))
-            {
-                g.DrawRectangle(borderPen, 0, 0, this.Width - 1, this.Height - 1);
-            }
-
-            // Left Sidebar Background (X: 0 to 200, W: 200, H: 540)
-            using (SolidBrush sideBg = new SolidBrush(Color.FromArgb(9, 12, 18)))
-            {
-                g.FillRectangle(sideBg, 1, 1, 199, this.Height - 2);
-            }
-            using (Pen sideSep = new Pen(Color.FromArgb(24, 32, 47), 1))
-            {
-                g.DrawLine(sideSep, 200, 1, 200, this.Height - 2);
-            }
-
-            // Brand Badge in Sidebar: Avatar [GS]
-            Rectangle rectAvatar = new Rectangle(16, 16, 36, 36);
-            using (GraphicsPath avPath = CreateRoundedRect(rectAvatar, 8))
-            {
-                using (SolidBrush bAv = new SolidBrush(Color.FromArgb(10, 30, 36)))
-                {
-                    g.FillPath(bAv, avPath);
-                }
-                using (Pen pAv = new Pen(Color.FromArgb(6, 182, 212), 1f))
-                {
-                    g.DrawPath(pAv, avPath);
-                }
-            }
-            using (Font fAv = new Font("Segoe UI", 10.5f, FontStyle.Bold))
-            using (Brush bAvText = new SolidBrush(Color.FromArgb(34, 211, 238)))
-            {
-                SizeF sz = g.MeasureString("GS", fAv);
-                float ax = rectAvatar.X + (rectAvatar.Width - sz.Width) / 2.0f;
-                float ay = rectAvatar.Y + (rectAvatar.Height - sz.Height) / 2.0f;
-                g.DrawString("GS", fAv, bAvText, ax, ay);
-            }
-
-            using (Font fAuthor = new Font("Segoe UI", 9.5f, FontStyle.Bold))
-            using (Brush bAuthor = new SolidBrush(Color.FromArgb(248, 250, 252)))
-            {
-                g.DrawString("getsentrix", fAuthor, bAuthor, 58, 17);
-            }
-            using (Font fSubBrand = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bSubBrand = new SolidBrush(Color.FromArgb(16, 185, 129)))
-            {
-                g.DrawString("RBLX Tuner v" + GitHubUpdateModule.CurrentVersion, fSubBrand, bSubBrand, 59, 36);
-            }
-
-            // Sidebar separator
-            using (Pen pDiv = new Pen(Color.FromArgb(24, 32, 47), 1))
-            {
-                g.DrawLine(pDiv, 14, 66, 186, 66);
-            }
-
-            // Navigation Tabs
-            DrawSidebarTab(g, rectTabOverview, "Overview", NavTab.Overview);
-            DrawSidebarTab(g, rectTabTuning, "Tuning", NavTab.Tuning);
-            DrawSidebarTab(g, rectTabStats, "Network Statistics", NavTab.Statistics);
-            DrawSidebarTab(g, rectTabSettings, "Settings", NavTab.Settings);
-
-            // Sidebar Bottom: Engine status indicator & GitHub link
-            int statDotY = 466;
-            Color statCol = isTuningApplied ? Color.FromArgb(16, 185, 129) : Color.FromArgb(100, 116, 139);
-            using (SolidBrush bDot = new SolidBrush(statCol))
-            {
-                g.FillEllipse(bDot, 18, statDotY, 8, 8);
-            }
-            using (Font fEngStat = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bEngStat = new SolidBrush(statCol))
-            {
-                g.DrawString(isTuningApplied ? "ACTIVE" : "STANDBY", fEngStat, bEngStat, 32, statDotY - 2);
-            }
-
-            // GitHub link pill in sidebar
-            if (hoverBtnGithub)
-            {
-                using (GraphicsPath pGh = CreateRoundedRect(rectBtnGithub, 6))
-                using (SolidBrush bGh = new SolidBrush(Color.FromArgb(18, 24, 35)))
-                {
-                    g.FillPath(bGh, pGh);
-                }
-            }
-            using (Font fGh = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bGh = new SolidBrush(hoverBtnGithub ? Color.FromArgb(56, 189, 248) : Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString("github.com/getsentrix", fGh, bGh, 18, 500);
-            }
-
-            // Header Bar (X: 201 to 879, Y: 1 to 48)
-            using (Pen hSep = new Pen(Color.FromArgb(24, 32, 47), 1))
-            {
-                g.DrawLine(hSep, 201, 48, this.Width - 2, 48);
-            }
-
-            // Breadcrumb title in header
-            string breadcrumb = "OVERVIEW  /  DASHBOARD";
-            if (activeTab == NavTab.Tuning) breadcrumb = "TUNING  CONFIGURATION";
-            else if (activeTab == NavTab.Statistics) breadcrumb = "STATISTICS";
-            else if (activeTab == NavTab.Settings) breadcrumb = "SETTINGS";
-
-            using (Font fBread = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bBread = new SolidBrush(Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString(breadcrumb, fBread, bBread, 218, 17);
-            }
-
-            // Version Pill / Update Button
-            string verText = isUpdateAvailable ? "UPDATE" : ("v" + GitHubUpdateModule.CurrentVersion);
-            Color verBg = isUpdateAvailable
-                ? (hoverBtnVersion ? Color.FromArgb(20, 83, 45) : Color.FromArgb(6, 78, 59))
-                : (hoverBtnVersion ? Color.FromArgb(28, 36, 50) : Color.FromArgb(18, 24, 36));
-            Color verBorder = isUpdateAvailable ? Color.FromArgb(52, 211, 153) : Color.FromArgb(16, 185, 129);
-            DrawPill(g, rectBtnVersion.X, rectBtnVersion.Y, rectBtnVersion.Width, rectBtnVersion.Height, verText, verBg, verBorder);
-
-            DrawWindowButton(g, rectBtnMin, "—", hoverBtnMin, Color.FromArgb(28, 36, 50), Color.White);
-            DrawWindowButton(g, rectBtnClose, "✕", hoverBtnClose, Color.FromArgb(225, 29, 72), Color.White);
-
-            // Render Content by Active Tab
-            if (activeTab == NavTab.Overview)
-            {
-                RenderOverviewTab(g);
-            }
-            else if (activeTab == NavTab.Tuning)
-            {
-                RenderTuningTab(g);
-            }
-            else if (activeTab == NavTab.Statistics)
-            {
-                RenderStatisticsTab(g);
-            }
-            else if (activeTab == NavTab.Settings)
-            {
-                RenderSettingsTab(g);
-            }
-        }
-
-        private void RenderOverviewTab(Graphics g)
-        {
-            // Row 1: 3 Sparkline Metric Cards (Y: 56, H: 94)
-            // Card 1: Latency (Ping)
-            Rectangle rectPing = new Rectangle(216, 56, 204, 94);
-            DrawRoundedCard(g, rectPing, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-            using (Font fLbl = new Font("Segoe UI", 7.0f, FontStyle.Bold))
-            using (Brush bLbl = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("LATENCY (PING)", fLbl, bLbl, 228, 64);
-            }
-            string pingStr = liveRtt > 0 ? string.Format("{0:F1} ms", liveRtt) : "24.2 ms";
-            using (Font fVal = new Font("Segoe UI", 16.5f, FontStyle.Bold))
-            using (Brush bVal = new SolidBrush(Color.FromArgb(52, 211, 153)))
-            {
-                g.DrawString(pingStr, fVal, bVal, 226, 76);
-            }
-            DrawSparkline(g, new Rectangle(226, 102, 184, 40), rttHistory, Color.FromArgb(52, 211, 153), Color.FromArgb(45, 16, 185, 129));
-
-            // Card 2: Packet Loss
-            Rectangle rectLoss = new Rectangle(432, 56, 204, 94);
-            DrawRoundedCard(g, rectLoss, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-            using (Font fLbl = new Font("Segoe UI", 7.0f, FontStyle.Bold))
-            using (Brush bLbl = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("PACKET LOSS", fLbl, bLbl, 444, 64);
-            }
-            using (Font fVal = new Font("Segoe UI", 16.5f, FontStyle.Bold))
-            using (Brush bVal = new SolidBrush(Color.FromArgb(56, 189, 248)))
-            {
-                g.DrawString("0.0%", fVal, bVal, 442, 76);
-            }
-            DrawSparkline(g, new Rectangle(442, 102, 184, 40), lossHistory, Color.FromArgb(56, 189, 248), Color.FromArgb(45, 56, 189, 248));
-
-            // Card 3: Bandwidth / Jitter
-            Rectangle rectBw = new Rectangle(648, 56, 216, 94);
-            DrawRoundedCard(g, rectBw, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-            using (Font fLbl = new Font("Segoe UI", 7.0f, FontStyle.Bold))
-            using (Brush bLbl = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("BANDWIDTH / JITTER", fLbl, bLbl, 660, 64);
-            }
-            string jitStr = liveJitter > 0 ? string.Format("±{0:F2} ms", liveJitter) : "±0.45 ms";
-            using (Font fVal = new Font("Segoe UI", 16.5f, FontStyle.Bold))
-            using (Brush bVal = new SolidBrush(Color.FromArgb(245, 158, 11)))
-            {
-                g.DrawString(jitStr, fVal, bVal, 658, 76);
-            }
-            DrawSparkline(g, new Rectangle(658, 102, 196, 40), bwHistory, Color.FromArgb(245, 158, 11), Color.FromArgb(45, 245, 158, 11));
-
-            // Row 2: Optimization Status Card (Y: 160, H: 130)
-            Rectangle rectStatus = new Rectangle(216, 160, 648, 130);
-            DrawRoundedCard(g, rectStatus, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            // Left: Status Circle & Checkmark
-            Rectangle rectCheckCircle = new Rectangle(236, 195, 46, 46);
-            using (SolidBrush bCircleBg = new SolidBrush(Color.FromArgb(6, 40, 28)))
-            {
-                g.FillEllipse(bCircleBg, rectCheckCircle);
-            }
-            using (Pen pCircle = new Pen(Color.FromArgb(16, 185, 129), 1.5f))
-            {
-                g.DrawEllipse(pCircle, rectCheckCircle);
-            }
-            using (Pen pCheck = new Pen(Color.FromArgb(52, 211, 153), 2.5f))
-            {
-                pCheck.StartCap = LineCap.Round;
-                pCheck.EndCap = LineCap.Round;
-                g.DrawLine(pCheck, 248, 218, 256, 226);
-                g.DrawLine(pCheck, 256, 226, 269, 209);
-            }
-
-            // Status Texts
-            string optTitle = isTuningApplied ? "Optimized Successfully" : "Not Optimized";
-            using (Font fOptHead = new Font("Segoe UI", 12.0f, FontStyle.Bold))
-            using (Brush bOptHead = new SolidBrush(Color.White))
-            {
-                g.DrawString(optTitle, fOptHead, bOptHead, 296, 174);
-            }
-            using (Font fOptSub = new Font("Segoe UI", 8.0f, FontStyle.Regular))
-            using (Brush bOptSub = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("0.50ms kernel timer, AFD UDP fast-path, and QoS DSCP 46 active.", fOptSub, bOptSub, 296, 197);
-            }
-            using (Font fSess = new Font("Segoe UI", 8.0f, FontStyle.Bold))
-            using (Brush bSess = new SolidBrush(isLiveGameServer ? Color.FromArgb(52, 211, 153) : Color.FromArgb(56, 189, 248)))
-            {
-                g.DrawString(robloxSessionStatus, fSess, bSess, 296, 219);
-            }
-            using (Font fWatch = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bWatch = new SolidBrush(robloxRunning ? Color.FromArgb(52, 211, 153) : Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString(watchdogStatus, fWatch, bWatch, 296, 241);
-            }
-
-            // Right: TUNE NOW Gradient Button
-            DrawGradientButton(g, rectBtnTuneNow, tuneBtnText, hoverBtnTuneNow && !isTuningInProgress);
-
-            // Row 3: Active Profiles Card (Y: 300, H: 194)
-            Rectangle rectProfiles = new Rectangle(216, 300, 648, 194);
-            DrawRoundedCard(g, rectProfiles, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fProfHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bProfHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("ACTIVE PROFILES & REAL-TIME CONTROLS", fProfHead, bProfHead, 232, 312);
-            }
-
-            // Item 1: Performance Mode
-            DrawPill(g, 232, 334, 48, 22, "PERF", Color.FromArgb(12, 45, 34), Color.FromArgb(52, 211, 153));
-            using (Font fItemT = new Font("Segoe UI", 9.25f, FontStyle.Bold))
-            using (Brush bItemT = new SolidBrush(Color.White))
-            {
-                g.DrawString("Performance Mode", fItemT, bItemT, 288, 332);
-            }
-            using (Font fItemS = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bItemS = new SolidBrush(Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString("0.50ms NtTimer, Winsock AFD buffer tuning, and CPU priority boost.", fItemS, bItemS, 288, 352);
-            }
-            DrawSwitch(g, rectSwitchPerf, perfModeEnabled, hoverSwitchPerf);
-
-            // Separator 1
-            using (Pen pSep = new Pen(Color.FromArgb(24, 32, 47), 1))
-            {
-                g.DrawLine(pSep, 232, 380, 850, 380);
-            }
-
-            // Item 2: Wi-Fi Roaming Guard
-            DrawPill(g, 232, 394, 48, 22, "WIFI", Color.FromArgb(12, 36, 54), Color.FromArgb(56, 189, 248));
-            using (Font fItemT = new Font("Segoe UI", 9.25f, FontStyle.Bold))
-            using (Brush bItemT = new SolidBrush(Color.White))
-            {
-                g.DrawString("Wi-Fi Roaming Guard", fItemT, bItemT, 288, 392);
-            }
-            using (Font fItemS = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bItemS = new SolidBrush(Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString("Locks BSSID roaming and suppresses background Wi-Fi network scans while gaming.", fItemS, bItemS, 288, 412);
-            }
-            DrawSwitch(g, rectSwitchWifi, wifiGuardEnabled, hoverSwitchWifi);
-
-            // Separator 2
-            using (Pen pSep = new Pen(Color.FromArgb(24, 32, 47), 1))
-            {
-                g.DrawLine(pSep, 232, 440, 850, 440);
-            }
-
-            // Background Contention Status Line
-            Color contColor = currentCompetingTraffic.HasHeavyTraffic ? Color.FromArgb(251, 191, 36) : Color.FromArgb(52, 211, 153);
-            using (SolidBrush bDot = new SolidBrush(contColor))
-            {
-                g.FillEllipse(bDot, 234, 455, 6, 6);
-            }
-            using (Font fCont = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bCont = new SolidBrush(contColor))
-            {
-                g.DrawString(currentCompetingTraffic.StatusText, fCont, bCont, 246, 451);
-            }
-
-            // Bottom Watermark
-            using (Font fWmark = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bWmark = new SolidBrush(Color.FromArgb(71, 85, 105)))
-            {
-                g.DrawString("github.com/getsentrix/RBLX-Network-Tuner  •  Roblox Latency Kernel Tuning", fWmark, bWmark, 218, 508);
-            }
-        }
-
-        private void RenderTuningTab(Graphics g)
-        {
-            // Card 1: Core Kernel & Socket Engine (Y: 56, H: 190)
-            Rectangle rectKernel = new Rectangle(216, 56, 648, 190);
-            DrawRoundedCard(g, rectKernel, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-            using (Font fH = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bH = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("KERNEL & WINSOCK SOCKET TUNING", fH, bH, 232, 66);
-            }
-
-            DrawTuningRow(g, 232, 82, "High-Resolution Multimedia Timer (0.50ms NtSetTimerResolution)", "Slashes Windows kernel scheduler latency floor from 15.6ms to 0.50ms.", timerEnabled, rectSwitchTimer);
-            DrawTuningRow(g, 232, 120, "Winsock AFD Fast-Path UDP Buffer (FastSendDatagramThreshold 1500B)", "Locks Winsock non-blocking UDP datagram fast path to eliminate socket queues.", afdEnabled, rectSwitchAfd);
-            DrawTuningRow(g, 232, 158, "Quality of Service (QoS) DSCP 46 Expedited Forwarding", "Prioritizes Roblox UDP transport packets ahead of standard traffic at NIC level.", qosEnabled, rectSwitchQos);
-            DrawTuningRow(g, 232, 196, "Multimedia Network Throttling Index (100% Unrestricted)", "Disables Windows multimedia network packet suppression on non-server editions.", throttleEnabled, rectSwitchThrottle);
-
-            // Card 2: Adapter & Hardware Acceleration (Y: 256, H: 160)
-            Rectangle rectNic = new Rectangle(216, 256, 648, 160);
-            DrawRoundedCard(g, rectNic, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-            using (Font fH = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bH = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("ADAPTER & HARDWARE ACCELERATION", fH, bH, 232, 266);
-            }
-            using (Font fNicT = new Font("Segoe UI", 8.5f, FontStyle.Bold))
-            using (Brush bNicT = new SolidBrush(Color.White))
-            {
-                string truncNic = activeAdapterName.Length > 64 ? activeAdapterName.Substring(0, 64) + "..." : activeAdapterName;
-                g.DrawString(truncNic, fNicT, bNicT, 232, 285);
-            }
-            using (Font fNicD = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bNicD = new SolidBrush(Color.FromArgb(56, 189, 248)))
-            {
-                g.DrawString(activeAdapterDetails, fNicD, bNicD, 232, 305);
-            }
-
-            DrawTuningRow(g, 232, 334, "Energy Efficient Ethernet (EEE) Disablement", "Prevents NIC sleep mode and PHY tranceiver wake delays on Ethernet adapters.", eeeEnabled, rectSwitchEee);
-            DrawTuningRow(g, 232, 372, "Disable Nagle's Algorithm (TCP_NODELAY & AckFrequency)", "Suppresses ACK buffering delays for instant response during HTTP asset transfers.", nagleEnabled, rectSwitchNagle);
-
-            // Action Buttons (Y: 426, H: 42)
-            Color btnReapplyBg = hoverBtnReapply ? Color.FromArgb(20, 83, 45) : Color.FromArgb(12, 45, 34);
-            DrawButton(g, rectBtnReapply, "Re-Apply All Tuning", btnReapplyBg, Color.FromArgb(52, 211, 153), Color.FromArgb(52, 211, 153));
-
-            Color btnRestoreBg = hoverBtnRestore ? Color.FromArgb(55, 20, 28) : Color.FromArgb(35, 14, 20);
-            DrawButton(g, rectBtnRestore, "Restore Defaults", btnRestoreBg, Color.FromArgb(244, 63, 94), Color.FromArgb(244, 63, 94));
-
-            Color btnBbBg = hoverBtnQuickBb ? Color.FromArgb(24, 38, 50) : Color.FromArgb(15, 24, 34);
-            DrawButton(g, rectBtnQuickBufferbloat, isBufferbloatRunning ? "Testing..." : "Bufferbloat Test", btnBbBg, Color.FromArgb(56, 189, 248), Color.FromArgb(56, 189, 248));
-
-            // Status message at bottom
-            using (Font fStat = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bStat = new SolidBrush(Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString(bufferbloatStatus, fStat, bStat, 218, 480);
-            }
-        }
-
-        private void DrawTuningRow(Graphics g, int x, int y, string title, string subtitle, bool isChecked, Rectangle switchRect)
-        {
-            using (Font fT = new Font("Segoe UI", 8.5f, FontStyle.Bold))
-            using (Brush bT = new SolidBrush(Color.White))
-            {
-                g.DrawString(title, fT, bT, x, y - 2);
-            }
-            using (Font fS = new Font("Segoe UI", 7.0f, FontStyle.Regular))
-            using (Brush bS = new SolidBrush(Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString(subtitle, fS, bS, x, y + 14);
-            }
-            DrawSwitch(g, switchRect, isChecked, switchRect.Contains(this.PointToClient(Cursor.Position)));
-        }
-
-        private void RenderStatisticsTab(Graphics g)
-        {
-            // Card 1: Hop-by-Hop Route Latency (Y: 56, H: 96)
-            Rectangle rectHops = new Rectangle(216, 56, 648, 96);
-            DrawRoundedCard(g, rectHops, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("ROUTE TELEMETRY", fCardHead, bCardHead, 232, 66);
-            }
-
-            Color routeColor = currentRouteHops.IsGatewayCongested ? Color.FromArgb(244, 63, 94) : (currentRouteHops.IsIspCongested ? Color.FromArgb(251, 191, 36) : Color.FromArgb(52, 211, 153));
-            using (Font fStatus = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bStatus = new SolidBrush(routeColor))
-            {
-                SizeF sz = g.MeasureString(currentRouteHops.RouteStatusText, fStatus);
-                g.DrawString(currentRouteHops.RouteStatusText, fStatus, bStatus, 850 - sz.Width, 66);
-            }
-
-            string gwText = string.Format("GATEWAY: {0:F1} ms", currentRouteHops.GatewayRttMs > 0 ? currentRouteHops.GatewayRttMs : 1.2);
-            DrawPill(g, 232, 92, 160, 28, gwText, Color.FromArgb(16, 22, 28), currentRouteHops.IsGatewayCongested ? Color.FromArgb(244, 63, 94) : Color.FromArgb(52, 211, 153));
-
-            using (Font fArrow = new Font("Segoe UI", 9f, FontStyle.Bold))
-            using (Brush bArrow = new SolidBrush(Color.FromArgb(80, 95, 115)))
-            {
-                g.DrawString("──▶", fArrow, bArrow, 404, 96);
-            }
-
-            string ispText = string.Format("ISP EDGE: {0:F1} ms", currentRouteHops.IspRttMs > 0 ? currentRouteHops.IspRttMs : 14.2);
-            DrawPill(g, 444, 92, 160, 28, ispText, Color.FromArgb(16, 22, 32), currentRouteHops.IsIspCongested ? Color.FromArgb(251, 191, 36) : Color.FromArgb(56, 189, 248));
-
-            using (Font fArrow = new Font("Segoe UI", 9f, FontStyle.Bold))
-            using (Brush bArrow = new SolidBrush(Color.FromArgb(80, 95, 115)))
-            {
-                g.DrawString("──▶", fArrow, bArrow, 616, 96);
-            }
-
-            string rbxText = string.Format("ROBLOX: {0:F1} ms", liveRtt > 0 ? liveRtt : (currentRouteHops.RobloxRttMs > 0 ? currentRouteHops.RobloxRttMs : 28.5));
-            DrawPill(g, 656, 92, 188, 28, rbxText, Color.FromArgb(16, 26, 22), isLiveGameServer ? Color.FromArgb(52, 211, 153) : Color.FromArgb(148, 163, 184));
-
-            // Card 2: Live Game Server Pacing Waveform (Y: 162, H: 180)
-            Rectangle rectWaveCard = new Rectangle(216, 162, 648, 180);
-            DrawRoundedCard(g, rectWaveCard, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                string gTitle = isLiveGameServer ? "LIVE GAME SERVER PACKET PACING (REAL-TIME RTT WAVEFORM)" : "PING";
-                g.DrawString(gTitle, fCardHead, bCardHead, 232, 172);
-            }
-
-            using (Font fMetricVal = new Font("Segoe UI", 16f, FontStyle.Bold))
-            using (Font fMetricLbl = new Font("Segoe UI", 7.0f, FontStyle.Bold))
-            using (Brush bRtt = new SolidBrush(Color.FromArgb(52, 211, 153)))
-            using (Brush bJitter = new SolidBrush(Color.FromArgb(56, 189, 248)))
-            using (Brush bLoss = new SolidBrush(Color.FromArgb(244, 114, 182)))
-            using (Brush bMuted = new SolidBrush(Color.FromArgb(110, 120, 135)))
-            {
-                string rttStr = liveRtt > 0 ? string.Format("{0:F1} ms", liveRtt) : "-- ms";
-                g.DrawString(rttStr, fMetricVal, bRtt, 232, 188);
-                g.DrawString("ROUND-TRIP TIME", fMetricLbl, bMuted, 234, 218);
-
-                string jStr = liveJitter > 0 ? string.Format("±{0:F2} ms", liveJitter) : "-- ms";
-                g.DrawString(jStr, fMetricVal, bJitter, 400, 188);
-                g.DrawString("RFC 3550 JITTER", fMetricLbl, bMuted, 402, 218);
-
-                g.DrawString("0.0%", fMetricVal, bLoss, 570, 188);
-                g.DrawString("PACKET LOSS", fMetricLbl, bMuted, 572, 218);
-
-                string paceBadge = isLiveGameServer ? "GAME SERVER" : (liveJitter < 2.0 ? "OPTIMAL" : "STABLE");
-                Color paceCol = isLiveGameServer ? Color.FromArgb(52, 211, 153) : Color.FromArgb(56, 189, 248);
-                DrawPill(g, 720, 192, 124, 24, paceBadge, Color.FromArgb(16, 24, 30), paceCol);
-            }
-
-            // Big Waveform
-            Rectangle chartBounds = new Rectangle(232, 236, 616, 92);
-            using (SolidBrush chartBg = new SolidBrush(Color.FromArgb(7, 9, 14)))
-            {
-                g.FillRectangle(chartBg, chartBounds);
-            }
-            using (Pen cBorder = new Pen(Color.FromArgb(20, 26, 38), 1))
-            {
-                g.DrawRectangle(cBorder, chartBounds);
-            }
-            DrawSparkline(g, chartBounds, rttHistory, Color.FromArgb(52, 211, 153), Color.FromArgb(50, 16, 185, 129));
-
-            // Card 3: Bufferbloat Diagnostic & Contention Watchdog (Y: 352, H: 140)
-            Rectangle rectBbCard = new Rectangle(216, 352, 648, 140);
-            DrawRoundedCard(g, rectBbCard, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("BUFFERBLOAT DIAGNOSTIC", fCardHead, bCardHead, 232, 362);
-            }
-
-            using (Font fStat = new Font("Segoe UI", 8.0f, FontStyle.Regular))
-            using (Brush bStat = new SolidBrush(Color.White))
-            {
-                g.DrawString(bufferbloatStatus, fStat, bStat, 232, 384);
-            }
-
-            Color btnBbBg = hoverBtnRunBb ? Color.FromArgb(20, 83, 45) : Color.FromArgb(12, 45, 34);
-            DrawButton(g, rectBtnRunBb, isBufferbloatRunning ? "Testing..." : "Run Bufferbloat Test", btnBbBg, Color.FromArgb(52, 211, 153), Color.FromArgb(52, 211, 153));
-
-            using (Font fProcStat = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bProcStat = new SolidBrush(currentCompetingTraffic.HasHeavyTraffic ? Color.FromArgb(251, 191, 36) : Color.FromArgb(52, 211, 153)))
-            {
-                g.DrawString("Competing Traffic: " + currentCompetingTraffic.StatusText, fProcStat, bProcStat, 424, 422);
-            }
-        }
-
-        private void RenderSettingsTab(Graphics g)
-        {
-            // Card 1: About & Open Source (Y: 56, H: 110)
-            Rectangle rectAbout = new Rectangle(216, 56, 648, 110);
-            DrawRoundedCard(g, rectAbout, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("ABOUT ROBLOX NETWORK TUNER", fCardHead, bCardHead, 232, 66);
-            }
-            using (Font fTitle = new Font("Segoe UI", 10.5f, FontStyle.Bold))
-            using (Brush bTitle = new SolidBrush(Color.White))
-            {
-                g.DrawString("Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", fTitle, bTitle, 232, 86);
-            }
-            using (Font fSub = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bSub = new SolidBrush(Color.FromArgb(100, 116, 139)))
-            {
-                g.DrawString("High-performance latency optimization for competitive Roblox gameplay.", fSub, bSub, 232, 108);
-            }
-
-            Color btnGhBg = hoverBtnSettingsGithub ? Color.FromArgb(28, 36, 50) : Color.FromArgb(18, 24, 36);
-            DrawButton(g, rectBtnSettingsGithub, "Open GitHub Repository", btnGhBg, Color.FromArgb(56, 189, 248), Color.FromArgb(56, 189, 248));
-
-            // Card 2: Auto-Update Engine (Y: 176, H: 120)
-            Rectangle rectUpdate = new Rectangle(216, 176, 648, 120);
-            DrawRoundedCard(g, rectUpdate, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("AUTO-UPDATE ENGINE", fCardHead, bCardHead, 232, 186);
-            }
-            using (Font fUpStat = new Font("Segoe UI", 8.0f, FontStyle.Regular))
-            using (Brush bUpStat = new SolidBrush(Color.White))
-            {
-                string uMsg = isUpdateAvailable && latestRelease != null
-                    ? string.Format("Update available: {0} (Current: v{1}). Click below to download & install.", latestRelease.TagName, GitHubUpdateModule.CurrentVersion)
-                    : "Roblox Network Tuner checks GitHub releases automatically. No installer overhead required.";
-                g.DrawString(uMsg, fUpStat, bUpStat, 232, 208);
-            }
-
-            Color btnUpBg = hoverBtnSettingsUpdate ? Color.FromArgb(20, 83, 45) : Color.FromArgb(12, 45, 34);
-            DrawButton(g, rectBtnSettingsUpdate, isCheckingForUpdate ? "Checking..." : (isUpdateAvailable ? "Install Update Now" : "Check for Updates"), btnUpBg, Color.FromArgb(52, 211, 153), Color.FromArgb(52, 211, 153));
-
-            // Card 3: Safety & Diagnostics (Y: 306, H: 150)
-            Rectangle rectSafety = new Rectangle(216, 306, 648, 150);
-            DrawRoundedCard(g, rectSafety, Color.FromArgb(13, 17, 25), Color.FromArgb(30, 41, 59), 8);
-
-            using (Font fCardHead = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush bCardHead = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("SAFETY & CRASH RECOVERY", fCardHead, bCardHead, 232, 316);
-            }
-            using (Font fSafeDesc = new Font("Segoe UI", 7.5f, FontStyle.Regular))
-            using (Brush bSafeDesc = new SolidBrush(Color.FromArgb(148, 163, 184)))
-            {
-                g.DrawString("Every modified registry key, QoS policy, timer resolution, and network adapter setting is backed up in memory\nand guaranteed to restore to factory defaults when Roblox exits or when you close the tuner.", fSafeDesc, bSafeDesc, 232, 336);
-            }
-
-            Color btnVerBg = hoverBtnVerify ? Color.FromArgb(28, 36, 50) : Color.FromArgb(18, 24, 36);
-            DrawButton(g, rectBtnVerify, "Verify Restoration", btnVerBg, Color.FromArgb(56, 189, 248), Color.FromArgb(56, 189, 248));
-
-            Color btnTrayBg = hoverBtnSettingsTray ? Color.FromArgb(28, 36, 50) : Color.FromArgb(18, 24, 36);
-            DrawButton(g, rectBtnSettingsTray, "Minimize to Tray", btnTrayBg, Color.FromArgb(148, 163, 184), Color.FromArgb(148, 163, 184));
-        }
-
-        private void DrawSidebarTab(Graphics g, Rectangle r, string text, NavTab tab)
-        {
-            bool isActive = (activeTab == tab);
-            bool isHovered = (hoveredTab == tab);
-
-            if (isActive)
-            {
-                using (GraphicsPath path = CreateRoundedRect(r, 6))
-                {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 27, 38))) // #131B26
-                    {
-                        g.FillPath(b, path);
-                    }
-                    using (Pen p = new Pen(Color.FromArgb(30, 41, 59), 1))
-                    {
-                        g.DrawPath(p, path);
-                    }
-                }
-                // Glowing left indicator bar
-                using (SolidBrush bBar = new SolidBrush(Color.FromArgb(16, 185, 129)))
-                {
-                    g.FillRectangle(bBar, r.X, r.Y + 6, 3, r.Height - 12);
-                }
-            }
-            else if (isHovered)
-            {
-                using (GraphicsPath path = CreateRoundedRect(r, 6))
-                {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(18, 24, 35)))
-                    {
-                        g.FillPath(b, path);
-                    }
-                }
-            }
-
-            Color textColor = isActive ? Color.White : (isHovered ? Color.FromArgb(203, 213, 225) : Color.FromArgb(100, 116, 139));
-            using (Font f = new Font("Segoe UI", 9f, isActive ? FontStyle.Bold : FontStyle.Regular))
-            using (Brush bText = new SolidBrush(textColor))
-            {
-                SizeF sz = g.MeasureString(text, f);
-                float ty = r.Y + (r.Height - sz.Height) / 2.0f;
-                g.DrawString(text, f, bText, r.X + 16, ty);
-            }
-        }
-
-        private static void DrawSparkline(Graphics g, Rectangle bounds, List<double> history, Color strokeColor, Color fillTopColor)
-        {
-            if (history == null || history.Count < 2) return;
-
-            PointF[] pts = new PointF[history.Count];
-            float stepX = (float)bounds.Width / (float)(history.Count - 1);
-            double minVal = double.MaxValue;
-            double maxVal = double.MinValue;
-            for (int i = 0; i < history.Count; i++)
-            {
-                if (history[i] < minVal) minVal = history[i];
-                if (history[i] > maxVal) maxVal = history[i];
-            }
-            if (Math.Abs(maxVal - minVal) < 1.0)
-            {
-                minVal -= 2.0;
-                maxVal += 2.0;
-            }
-
-            for (int i = 0; i < history.Count; i++)
-            {
-                double v = history[i];
-                float py = bounds.Bottom - (float)((v - minVal) / (maxVal - minVal) * (bounds.Height - 8)) - 4;
-                pts[i] = new PointF(bounds.X + i * stepX, py);
-            }
-
-            using (GraphicsPath wavePath = new GraphicsPath())
-            {
-                wavePath.AddCurve(pts, 0.35f);
-                wavePath.AddLine(pts[pts.Length - 1].X, bounds.Bottom, pts[0].X, bounds.Bottom);
-                wavePath.CloseFigure();
-
-                using (LinearGradientBrush grad = new LinearGradientBrush(
-                    new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height + 1),
-                    fillTopColor,
-                    Color.FromArgb(0, fillTopColor),
-                    90f))
-                {
-                    g.FillPath(grad, wavePath);
-                }
-            }
-
-            using (Pen curvePen = new Pen(strokeColor, 1.8f))
-            {
-                g.DrawCurve(curvePen, pts, 0.35f);
-            }
-        }
-
-        private static void DrawSwitch(Graphics g, Rectangle r, bool isChecked, bool hover)
-        {
-            int radius = r.Height / 2;
-            Color trackColor = isChecked 
-                ? (hover ? Color.FromArgb(16, 185, 129) : Color.FromArgb(5, 150, 105))
-                : (hover ? Color.FromArgb(51, 65, 85) : Color.FromArgb(30, 41, 59));
-            Color borderColor = isChecked ? Color.FromArgb(52, 211, 153) : Color.FromArgb(71, 85, 105);
-
-            using (GraphicsPath trackPath = CreateRoundedRect(r, radius))
-            {
-                using (SolidBrush trackBrush = new SolidBrush(trackColor))
-                {
-                    g.FillPath(trackBrush, trackPath);
-                }
-                using (Pen trackPen = new Pen(borderColor, 1f))
-                {
-                    g.DrawPath(trackPen, trackPath);
-                }
-            }
-
-            int thumbSize = r.Height - 6;
-            int thumbX = isChecked ? (r.Right - thumbSize - 3) : (r.X + 3);
-            int thumbY = r.Y + 3;
-            Rectangle thumbRect = new Rectangle(thumbX, thumbY, thumbSize, thumbSize);
-
-            using (SolidBrush thumbBrush = new SolidBrush(Color.White))
-            {
-                g.FillEllipse(thumbBrush, thumbRect);
-            }
-        }
-
-        private static void DrawGradientButton(Graphics g, Rectangle r, string text, bool hover)
-        {
-            Color c1, c2;
-            Color textCol = Color.FromArgb(6, 24, 18);
-
-            if (text.StartsWith("TUNING"))
-            {
-                c1 = Color.FromArgb(13, 148, 136);
-                c2 = Color.FromArgb(14, 116, 144);
-                textCol = Color.White;
-            }
-            else if (text.StartsWith("TUNED"))
-            {
-                c1 = Color.FromArgb(5, 150, 105);
-                c2 = Color.FromArgb(16, 185, 129);
-                textCol = Color.White;
-            }
-            else
-            {
-                c1 = hover ? Color.FromArgb(52, 211, 153) : Color.FromArgb(16, 185, 129);
-                c2 = hover ? Color.FromArgb(34, 211, 238) : Color.FromArgb(6, 182, 212);
-                textCol = Color.FromArgb(6, 24, 18);
-            }
-
-            using (GraphicsPath path = CreateRoundedRect(r, 6))
-            {
-                using (LinearGradientBrush b = new LinearGradientBrush(r, c1, c2, 45f))
-                {
-                    g.FillPath(b, path);
-                }
-                using (Pen p = new Pen(Color.FromArgb(110, 231, 183), 1f))
-                {
-                    g.DrawPath(p, path);
-                }
-            }
-
-            using (Font f = new Font("Segoe UI", 9.5f, FontStyle.Bold))
-            using (Brush bText = new SolidBrush(textCol))
-            {
-                SizeF sz = g.MeasureString(text, f);
-                float tx = r.X + (r.Width - sz.Width) / 2.0f;
-                float ty = r.Y + (r.Height - sz.Height) / 2.0f;
-                g.DrawString(text, f, bText, tx, ty);
-            }
-        }
-
-        private static void DrawRoundedCard(Graphics g, Rectangle bounds, Color bg, Color border, int radius)
-        {
-            using (GraphicsPath path = CreateRoundedRect(bounds, radius))
-            {
-                using (SolidBrush b = new SolidBrush(bg))
-                {
-                    g.FillPath(b, path);
-                }
-                using (Pen p = new Pen(border, 1))
-                {
-                    g.DrawPath(p, path);
-                }
-            }
-        }
-
-        private static void DrawButton(Graphics g, Rectangle bounds, string text, Color bg, Color border, Color textColor)
-        {
-            using (GraphicsPath path = CreateRoundedRect(bounds, 6))
-            {
-                using (SolidBrush b = new SolidBrush(bg))
-                {
-                    g.FillPath(b, path);
-                }
-                using (Pen p = new Pen(border, 1))
-                {
-                    g.DrawPath(p, path);
-                }
-            }
-            using (Font f = new Font("Segoe UI", 8.5f, FontStyle.Bold))
-            using (Brush bText = new SolidBrush(textColor))
-            {
-                SizeF sz = g.MeasureString(text, f);
-                float tx = bounds.X + (bounds.Width - sz.Width) / 2.0f;
-                float ty = bounds.Y + (bounds.Height - sz.Height) / 2.0f;
-                g.DrawString(text, f, bText, tx, ty);
-            }
-        }
-
-        private static void DrawPill(Graphics g, int x, int y, int width, int height, string text, Color bg, Color textColor)
-        {
-            Rectangle r = new Rectangle(x, y, width, height);
-            using (GraphicsPath path = CreateRoundedRect(r, height / 2))
-            {
-                using (SolidBrush b = new SolidBrush(bg))
-                {
-                    g.FillPath(b, path);
-                }
-                using (Pen p = new Pen(textColor, 1))
-                {
-                    g.DrawPath(p, path);
-                }
-            }
-            using (Font f = new Font("Segoe UI", 7.5f, FontStyle.Bold))
-            using (Brush b = new SolidBrush(textColor))
-            {
-                SizeF sz = g.MeasureString(text, f);
-                float tx = x + (width - sz.Width) / 2.0f;
-                float ty = y + (height - sz.Height) / 2.0f;
-                g.DrawString(text, f, b, tx, ty);
-            }
-        }
-
-        private static void DrawWindowButton(Graphics g, Rectangle r, string text, bool hover, Color hoverBg, Color textColor)
-        {
-            if (hover)
-            {
-                using (SolidBrush b = new SolidBrush(hoverBg))
-                {
-                    g.FillRectangle(b, r);
-                }
-            }
-            using (Font f = new Font("Segoe UI", 9.5f, FontStyle.Bold))
-            using (Brush b = new SolidBrush(textColor))
-            {
-                SizeF sz = g.MeasureString(text, f);
-                float tx = r.X + (r.Width - sz.Width) / 2.0f;
-                float ty = r.Y + (r.Height - sz.Height) / 2.0f;
-                g.DrawString(text, f, b, tx, ty);
-            }
-        }
-
-        private static GraphicsPath CreateRoundedRect(Rectangle r, int radius)
-        {
-            GraphicsPath path = new GraphicsPath();
-            int d = radius * 2;
-            path.AddArc(r.X, r.Y, d, d, 180, 90);
-            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        private void TriggerUpdateCheckGui(bool fromMenu)
-        {
-            if (isCheckingForUpdate) return;
-
-            if (isUpdateAvailable && latestRelease != null)
-            {
-                PromptAndApplyUpdate(latestRelease);
-                return;
-            }
-
-            isCheckingForUpdate = true;
-            bufferbloatStatus = "Checking for updates on GitHub...";
-            this.Invalidate();
-
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                GitHubUpdateModule.ReleaseInfo rel = GitHubUpdateModule.FetchLatestRelease();
-                try
-                {
-                    this.BeginInvoke((MethodInvoker)delegate
-                    {
-                        isCheckingForUpdate = false;
-                        if (rel != null && rel.ReleaseVersion != null)
-                        {
-                            Version curVer = GitHubUpdateModule.ParseVersionSafe(GitHubUpdateModule.CurrentVersion);
-                            if (rel.ReleaseVersion > curVer)
-                            {
-                                isUpdateAvailable = true;
-                                latestRelease = rel;
-                                this.Invalidate();
-                                PromptAndApplyUpdate(rel);
-                            }
-                            else
-                            {
-                                bufferbloatStatus = "You are running the latest version (v" + GitHubUpdateModule.CurrentVersion + ").";
-                                this.Invalidate();
-                                MessageBox.Show(this,
-                                    string.Format("Roblox Network Tuner is up to date!\n\nYou are running the latest version (v{0}).", GitHubUpdateModule.CurrentVersion),
-                                    "Up to Date - Roblox Network Tuner",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Information);
-                            }
-                        }
-                        else
-                        {
-                            bufferbloatStatus = "Unable to connect to GitHub releases API.";
-                            this.Invalidate();
-                            MessageBox.Show(this,
-                                "Unable to check for updates.\n\nPlease verify your internet connection and try again.",
-                                "Update Check Failed",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Warning);
-                        }
-                    });
-                }
-                catch { }
-            });
-        }
-
-        private void PromptAndApplyUpdate(GitHubUpdateModule.ReleaseInfo rel)
-        {
-            string msg = string.Format(
-                "A new version of Roblox Network Tuner is available!\n\n" +
-                "Current Version: v{0}\n" +
-                "Latest Version:  {1}\n\n" +
-                "Would you like to download and install this update now?",
-                GitHubUpdateModule.CurrentVersion, rel.TagName);
-
-            DialogResult dr = MessageBox.Show(this, msg, "Update Available - Roblox Network Tuner", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-            if (dr == DialogResult.Yes)
-            {
-                bufferbloatStatus = "Downloading update " + rel.TagName + "...";
-                this.Invalidate();
-
-                ThreadPool.QueueUserWorkItem(delegate
-                {
-                    GitHubUpdateModule.PerformUpdateWithHandoff(rel, true, delegate(string status)
-                    {
-                        try
-                        {
-                            this.BeginInvoke((MethodInvoker)delegate
-                            {
-                                bufferbloatStatus = status;
-                                this.Invalidate();
-                            });
-                        }
-                        catch { }
-                    });
-                });
-            }
-        }
-    }
-
+    #region Modern Hardware-Accelerated WPF GUI
+    // The hardware-accelerated WPF UI implementation is located in TunerWpfWindow.cs
     #endregion
 
     #region Main Controller & Watchdog Session
@@ -5039,6 +3446,10 @@ try {
             catch { }
         }
 
+        public static void ApplyOptimizations() { ApplyAll(); }
+        public static void RestoreDefaults() { RestoreAll(); }
+
+        [STAThread]
         private static void Main(string[] args)
         {
             if (args != null && args.Length > 0)
@@ -5139,9 +3550,8 @@ try {
                     return;
                 }
 
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new TunerGuiForm());
+                System.Windows.Application app = new System.Windows.Application();
+                app.Run(new TunerWpfWindow());
             }
         }
 

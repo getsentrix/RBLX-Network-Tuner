@@ -34,9 +34,9 @@ if (Test-Path $appIcon) {
 Write-Host "[1/5] Compiling core engine: RobloxNetworkTuner.exe ... " -NoNewline
 $tunerOut = Join-Path $projectRoot "RobloxNetworkTuner.exe"
 $tunerManifest = Join-Path $projectRoot "app.manifest"
-$programCs = Join-Path $projectRoot "Program.cs"
+$sources = @( (Join-Path $projectRoot "Program.cs"), (Join-Path $projectRoot "TunerWpfWindow.cs") )
 
-& $csc /target:winexe /out:$tunerOut $iconArgs /win32manifest:$tunerManifest /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 $programCs | Out-Null
+& $csc /target:winexe /out:$tunerOut $iconArgs /win32manifest:$tunerManifest /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /optimize+ /platform:x64 $sources | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAILED" -ForegroundColor Red

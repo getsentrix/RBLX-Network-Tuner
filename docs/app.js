@@ -273,6 +273,6 @@ function fetchGitHubReleaseInfo() {
       }
     })
     .catch(() => {
-      // Graceful offline fallback: keep hardcoded v2.4.3 values
+      // Graceful offline fallback: keep hardcoded v2.4.4 values
     });
 }
