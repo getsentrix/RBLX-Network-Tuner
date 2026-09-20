@@ -28,8 +28,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8b3838e7-7c38-4fee-8c84-3701258607a9")]
-[assembly: AssemblyVersion("2.4.0.0")]
-[assembly: AssemblyFileVersion("2.4.0.0")]
+[assembly: AssemblyVersion("2.4.1.0")]
+[assembly: AssemblyFileVersion("2.4.1.0")]
 
 namespace RobloxNetworkTuner
 {
@@ -2463,7 +2463,7 @@ namespace RobloxNetworkTuner
 
     internal static class GitHubUpdateModule
     {
-        public const string CurrentVersion = "2.4.0";
+        public const string CurrentVersion = "2.4.1";
         public const string DefaultGitHubRepo = "getsentrix/RBLX-Network-Tuner";
 
         public class ReleaseInfo
@@ -3826,7 +3826,7 @@ try {
             using (Font fSubBrand = new Font("Segoe UI", 7.5f, FontStyle.Bold))
             using (Brush bSubBrand = new SolidBrush(Color.FromArgb(16, 185, 129)))
             {
-                g.DrawString("RBLX Tuner v2.4.0", fSubBrand, bSubBrand, 59, 36);
+                g.DrawString("RBLX Tuner v" + GitHubUpdateModule.CurrentVersion, fSubBrand, bSubBrand, 59, 36);
             }
 
             // Sidebar separator
