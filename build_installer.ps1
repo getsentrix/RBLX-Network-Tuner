@@ -24,13 +24,19 @@ Write-Host "====================================================================
 Write-Host " BUILDING ROBLOX NETWORK TUNER SUITE" -ForegroundColor White
 Write-Host "================================================================================" -ForegroundColor Cyan
 
+$appIcon = Join-Path $projectRoot "app.ico"
+$iconArgs = @()
+if (Test-Path $appIcon) {
+    $iconArgs += "/win32icon:$appIcon"
+}
+
 # 1. Compile Core Tuner Engine
 Write-Host "[1/5] Compiling core engine: RobloxNetworkTuner.exe ... " -NoNewline
 $tunerOut = Join-Path $projectRoot "RobloxNetworkTuner.exe"
 $tunerManifest = Join-Path $projectRoot "app.manifest"
 $programCs = Join-Path $projectRoot "Program.cs"
 
-& $csc /target:exe /out:$tunerOut /win32manifest:$tunerManifest /r:System.ServiceProcess.dll /optimize+ /platform:x64 $programCs | Out-Null
+& $csc /target:winexe /out:$tunerOut $iconArgs /win32manifest:$tunerManifest /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 $programCs | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAILED" -ForegroundColor Red
@@ -61,7 +67,7 @@ $setupOut = Join-Path $projectRoot "RobloxNetworkTunerSetup.exe"
 $setupManifest = Join-Path $projectRoot "installer.manifest"
 $bootstrapperCs = Join-Path $projectRoot "Bootstrapper.cs"
 
-& $csc /target:exe /out:$setupOut /win32manifest:$setupManifest /res:"$pkgPath",RobloxNetworkTuner.pkg /optimize+ /platform:x64 $bootstrapperCs | Out-Null
+& $csc /target:exe /out:$setupOut $iconArgs /win32manifest:$setupManifest /res:"$pkgPath",RobloxNetworkTuner.pkg /optimize+ /platform:x64 $bootstrapperCs | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAILED" -ForegroundColor Red
