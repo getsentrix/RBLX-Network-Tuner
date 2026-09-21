@@ -3,7 +3,7 @@
 A lightweight Windows tool designed to eliminate random ping spikes, jitter, and input delay in Roblox. Runs automatically in the background while you play and restores all default Windows settings the second Roblox closes.
 
 <p align="center">
-  <img src="assets/preview.png" alt="Interface" width="560" />
+  <img src="2026-09-20-19-26-a135.png" alt="Interface" width="560" />
 </p>
 
 <p align="center">
