@@ -20,11 +20,11 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Roblox Network Tuner")]
-[assembly: AssemblyDescription("Roblox Low-Latency & Anti-Jitter Packet Optimization Engine")]
+[assembly: AssemblyDescription("Roblox Low-Latency Network Tuner")]
 [assembly: AssemblyConfiguration("Release")]
 [assembly: AssemblyCompany("Roblox Performance Engineering")]
 [assembly: AssemblyProduct("Roblox Network Tuner")]
-[assembly: AssemblyCopyright("Copyright Â© 2026")]
+[assembly: AssemblyCopyright("Copyright (C) 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
@@ -3925,7 +3925,7 @@ try {
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("================================================================================");
-            Console.WriteLine(" ROBLOX NETWORK TUNER [x64] - LOW-LATENCY & ANTI-JITTER ENGINE");
+            Console.WriteLine(" ROBLOX NETWORK TUNER [x64]");
             Console.WriteLine(" Target: RobloxPlayerBeta.exe");
             Console.WriteLine("================================================================================");
             Console.ResetColor();

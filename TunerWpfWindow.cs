@@ -1262,7 +1262,7 @@ namespace RobloxNetworkTuner
             list.Children.Add(h);
 
             switchTimer = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Timer Resolution (0.50ms)", "Slashes Windows scheduler delay from 15.6ms to 0.50ms", switchTimer));
+            list.Children.Add(CreateTuningRow("Timer Resolution (0.50ms)", "Reduces Windows scheduler delay from 15.6ms to 0.50ms", switchTimer));
 
             switchInterrupt = new AnimatedToggleSwitch(true);
             list.Children.Add(CreateTuningRow("Interrupt Moderation (Off)", "Immediate CPU interrupt on packet arrival (no batching)", switchInterrupt));
@@ -1283,7 +1283,7 @@ namespace RobloxNetworkTuner
             list.Children.Add(CreateTuningRow("TCP NoDelay & AckFrequency", "Immediate ACK for Roblox meshes, textures, and sounds", switchNagle));
 
             switchEee = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Energy Efficient Ethernet (Off)", "Prevents PHY tranceiver sleep delays on Ethernet adapters", switchEee));
+            list.Children.Add(CreateTuningRow("Energy Efficient Ethernet (Off)", "Prevents adapter sleep delays on wired connections", switchEee));
 
             scroll.Content = list;
             card.Child = scroll;
@@ -1907,7 +1907,7 @@ namespace RobloxNetworkTuner
                     }
                     txtOptTitle.Text = "Optimized Successfully";
                     txtOptTitle.Foreground = new SolidColorBrush(Colors.White);
-                    txtOptSub.Text = "0.50ms timer • NDIS fast-path • EcoQoS disabled";
+                    txtOptSub.Text = "0.50ms timer | NDIS fast-path | EcoQoS disabled";
                     if (statusCard != null) WpfAnimationHelper.AnimateBorderBrush(statusCard, Color.FromRgb(16, 185, 129), 300);
                 }));
             });
@@ -2323,7 +2323,7 @@ namespace RobloxNetworkTuner
             // 3. Subtitle
             TextBlock sub = new TextBlock
             {
-                Text = "Low-Latency & Anti-Jitter Packet Engine",
+                Text = "Low-Latency Network Engine",
                 FontSize = 10.5,
                 Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -2372,7 +2372,7 @@ namespace RobloxNetworkTuner
             // 5. Version & Status Pill
             TextBlock status = new TextBlock
             {
-                Text = "v" + GitHubUpdateModule.CurrentVersion + " • Ready",
+                Text = "v" + GitHubUpdateModule.CurrentVersion + " | Ready",
                 FontSize = 9.5,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(52, 211, 153)),

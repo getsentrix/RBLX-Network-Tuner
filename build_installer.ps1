@@ -36,7 +36,7 @@ $tunerOut = Join-Path $projectRoot "RobloxNetworkTuner.exe"
 $tunerManifest = Join-Path $projectRoot "app.manifest"
 $sources = @( (Join-Path $projectRoot "Program.cs"), (Join-Path $projectRoot "TunerWpfWindow.cs") )
 
-& $csc /target:winexe /out:$tunerOut $iconArgs /win32manifest:$tunerManifest /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /optimize+ /platform:x64 $sources | Out-Null
+& $csc /target:winexe /out:$tunerOut $iconArgs /win32manifest:$tunerManifest /codepage:65001 /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /optimize+ /platform:x64 $sources | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAILED" -ForegroundColor Red
@@ -67,7 +67,7 @@ $setupOut = Join-Path $projectRoot "RobloxNetworkTunerSetup.exe"
 $setupManifest = Join-Path $projectRoot "installer.manifest"
 $bootstrapperCs = Join-Path $projectRoot "Bootstrapper.cs"
 
-& $csc /target:winexe /out:$setupOut $iconArgs /win32manifest:$setupManifest /res:"$pkgPath",RobloxNetworkTuner.pkg /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 $bootstrapperCs | Out-Null
+& $csc /target:winexe /out:$setupOut $iconArgs /win32manifest:$setupManifest /codepage:65001 /res:"$pkgPath",RobloxNetworkTuner.pkg /r:System.ServiceProcess.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /optimize+ /platform:x64 $bootstrapperCs | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAILED" -ForegroundColor Red
