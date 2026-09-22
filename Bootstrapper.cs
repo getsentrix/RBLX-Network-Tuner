@@ -26,8 +26,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("3a4d6201-9f14-4e86-8e30-22d29cda328c")]
-[assembly: AssemblyVersion("2.4.9.0")]
-[assembly: AssemblyFileVersion("2.4.9.0")]
+[assembly: AssemblyVersion("2.5.0.0")]
+[assembly: AssemblyFileVersion("2.5.0.0")]
 
 namespace RobloxNetworkTuner.Setup
 {
@@ -36,7 +36,7 @@ namespace RobloxNetworkTuner.Setup
     internal static class Program
     {
         public const string AppTitle = "Roblox Network Tuner";
-        public const string AppVersion = "2.4.9";
+        public const string AppVersion = "2.5.0";
         public const string PublisherName = "Roblox Performance Engineering";
         public const string UninstallRegSubKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RobloxNetworkTuner";
         public const string QosPolicyName = "RobloxNetworkTuner_DSCP46";

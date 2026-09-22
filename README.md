@@ -8,7 +8,7 @@ A lightweight Windows tool designed to eliminate random ping spikes, jitter, and
 
 <p align="center">
   <a href="https://getsentrix.github.io/RBLX-Network-Tuner/"><strong>🌐 Visit Live Showcase Website</strong></a> • 
-  <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/latest"><strong>📦 Download Latest Release (v2.4.9)</strong></a>
+  <a href="https://github.com/getsentrix/RBLX-Network-Tuner/releases/latest"><strong>📦 Download Latest Release (v2.5.0)</strong></a>
 </p>
 
 ---
