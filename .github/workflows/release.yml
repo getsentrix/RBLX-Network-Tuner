@@ -1,0 +1,53 @@
+name: Release & Package Distribution
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build Executables & Installer
+        shell: powershell
+        run: |
+          .\build_installer.ps1 -SkipSigning
+
+      - name: Verify SHA256 Checksums
+        shell: powershell
+        run: |
+          Get-FileHash release\RobloxNetworkTuner.exe -Algorithm SHA256
+          Get-FileHash release\RobloxNetworkTunerSetup.exe -Algorithm SHA256
+          Get-Content release\SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release/RobloxNetworkTuner.exe
+            release/RobloxNetworkTunerSetup.exe
+            release/RobloxNetworkTuner.pkg
+            release/SHA256SUMS.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Winget Package Releaser
+        uses: vedantmgoyal9/winget-releaser@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          identifier: getsentrix.RobloxNetworkTuner
+          installer-type: exe
+          installer-url: https://github.com/getsentrix/RBLX-Network-Tuner/releases/download/${{ github.ref_name }}/RobloxNetworkTunerSetup.exe
+          token: ${{ secrets.WINGET_TOKEN || secrets.GITHUB_TOKEN }}

@@ -401,8 +401,9 @@ namespace RobloxNetworkTuner
         }
     }
 
-    public class SparklineVectorCanvas : Canvas
+    public class SparklineVectorCanvas : Grid
     {
+        private Canvas drawCanvas;
         private Polyline polyline;
         private Polygon areaPolygon;
         private Line baseline;
@@ -416,27 +417,35 @@ namespace RobloxNetworkTuner
         {
             lineColor = color;
             this.ClipToBounds = true;
+            this.HorizontalAlignment = HorizontalAlignment.Stretch;
+            this.VerticalAlignment = VerticalAlignment.Stretch;
+
+            drawCanvas = new Canvas();
+            drawCanvas.HorizontalAlignment = HorizontalAlignment.Stretch;
+            drawCanvas.VerticalAlignment = VerticalAlignment.Stretch;
 
             areaPolygon = new Polygon();
             LinearGradientBrush areaBrush = new LinearGradientBrush();
             areaBrush.StartPoint = new Point(0, 0);
             areaBrush.EndPoint = new Point(0, 1);
-            areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(45, color.R, color.G, color.B), 0.0));
+            areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(60, color.R, color.G, color.B), 0.0));
+            areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(10, color.R, color.G, color.B), 0.75));
             areaBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1.0));
             areaPolygon.Fill = areaBrush;
 
             polyline = new Polyline();
             polyline.Stroke = new SolidColorBrush(color);
-            polyline.StrokeThickness = 1.6;
+            polyline.StrokeThickness = 2.0;
             polyline.StrokeLineJoin = PenLineJoin.Round;
 
             baseline = new Line();
             baseline.Stroke = new SolidColorBrush(Color.FromArgb(35, 255, 255, 255));
             baseline.StrokeThickness = 0.8;
 
-            this.Children.Add(baseline);
-            this.Children.Add(areaPolygon);
-            this.Children.Add(polyline);
+            drawCanvas.Children.Add(baseline);
+            drawCanvas.Children.Add(areaPolygon);
+            drawCanvas.Children.Add(polyline);
+            this.Children.Add(drawCanvas);
 
             this.SizeChanged += delegate
             {
@@ -465,12 +474,13 @@ namespace RobloxNetworkTuner
             PointCollection pts = new PointCollection();
             PointCollection areaPts = new PointCollection();
 
-            double step = this.ActualWidth / (double)(values.Length - 1);
+            double w = this.ActualWidth;
             double h = this.ActualHeight;
+            double step = w / (double)(values.Length - 1);
 
             baseline.X1 = 0;
             baseline.Y1 = h - 1;
-            baseline.X2 = this.ActualWidth;
+            baseline.X2 = w;
             baseline.Y2 = h - 1;
 
             areaPts.Add(new Point(0, h));
@@ -488,7 +498,7 @@ namespace RobloxNetworkTuner
                 areaPts.Add(pt);
             }
 
-            areaPts.Add(new Point(this.ActualWidth, h));
+            areaPts.Add(new Point(w, h));
 
             polyline.Points = pts;
             areaPolygon.Points = areaPts;
@@ -541,6 +551,7 @@ namespace RobloxNetworkTuner
         private TextBlock txtOptSub;
         private TextBlock txtRobloxStatus;
         private ModernButton btnTuneNow;
+        private ModernButton btnUntune;
         private ModernButton verPillBtn;
 
         // Real-Time Controls
@@ -572,6 +583,7 @@ namespace RobloxNetworkTuner
         private TextBlock txtStatLossVal;
         private SparklineVectorCanvas sparkBigWaveform;
         private TextBlock txtStatBufferbloat;
+        private TextBlock txtStatBufferbloatAdvice;
         private ModernButton btnRunBufferbloat;
 
         // Settings Tab Controls
@@ -1036,7 +1048,7 @@ namespace RobloxNetworkTuner
 
             txtLossVal = new TextBlock { Text = "0.0%", FontSize = 21, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)) };
             sparkLoss = new SparklineVectorCanvas(Color.FromRgb(56, 189, 248));
-            topCards.Children.Add(CreateMetricCard("PACKET LOSS", txtLossVal, sparkLoss, 2));
+            topCards.Children.Add(CreateMetricCard("PACKET LOSS", txtLossVal, sparkLoss, 2, "Filters intermediate ICMP drops to report actual client-to-Roblox UDP packet loss"));
 
             txtJitterVal = new TextBlock { Text = "±0.45 ms", FontSize = 21, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(245, 158, 11)) };
             sparkJitter = new SparklineVectorCanvas(Color.FromRgb(245, 158, 11));
@@ -1057,7 +1069,7 @@ namespace RobloxNetworkTuner
             statusGrid.Margin = new Thickness(18, 16, 18, 16);
             statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
             statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(164) });
+            statusGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(290) });
 
             // Check Circle
             statusCircle = new Border();
@@ -1089,14 +1101,24 @@ namespace RobloxNetworkTuner
 
             statusGrid.Children.Add(statTxtStack);
 
-            // Modern TUNE NOW Button
-            btnTuneNow = ModernButton.CreateHero("TUNE NOW", 150, 46);
-            Grid.SetColumn(btnTuneNow, 2);
-            btnTuneNow.HorizontalAlignment = HorizontalAlignment.Right;
-            btnTuneNow.VerticalAlignment = VerticalAlignment.Center;
+            // Action Buttons (Restore Defaults & TUNE NOW)
+            StackPanel statusBtns = new StackPanel();
+            statusBtns.Orientation = Orientation.Horizontal;
+            statusBtns.HorizontalAlignment = HorizontalAlignment.Right;
+            statusBtns.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(statusBtns, 2);
+
+            btnUntune = ModernButton.CreateAction("Restore Defaults", Color.FromRgb(148, 163, 184), 42);
+            btnUntune.Margin = new Thickness(0, 0, 10, 0);
+            btnUntune.Click += delegate { TriggerRestoreAsync(); };
+
+            btnTuneNow = ModernButton.CreateHero("TUNE NOW", 136, 42);
             btnTuneNow.Click += delegate { TriggerTuneAction(); };
 
-            statusGrid.Children.Add(btnTuneNow);
+            statusBtns.Children.Add(btnUntune);
+            statusBtns.Children.Add(btnTuneNow);
+            statusGrid.Children.Add(statusBtns);
+
             statusCard.Child = statusGrid;
             grid.Children.Add(statusCard);
 
@@ -1147,7 +1169,7 @@ namespace RobloxNetworkTuner
             return grid;
         }
 
-        private Border CreateMetricCard(string title, TextBlock valBlock, SparklineVectorCanvas sparkline, int colIndex)
+        private Border CreateMetricCard(string title, TextBlock valBlock, SparklineVectorCanvas sparkline, int colIndex, string tooltip = null)
         {
             Border card = new Border();
             Grid.SetColumn(card, colIndex);
@@ -1155,6 +1177,10 @@ namespace RobloxNetworkTuner
             card.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             card.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             card.BorderThickness = new Thickness(1);
+            if (!string.IsNullOrEmpty(tooltip))
+            {
+                card.ToolTip = tooltip;
+            }
 
             Grid cg = new Grid();
             cg.Margin = new Thickness(14, 12, 14, 10);
@@ -1262,37 +1288,46 @@ namespace RobloxNetworkTuner
             list.Children.Add(h);
 
             switchTimer = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Timer Resolution (0.50ms)", "Reduces Windows scheduler delay from 15.6ms to 0.50ms", switchTimer));
+            list.Children.Add(CreateTuningRow("Force 0.50ms Timer Resolution", "Reduces Windows scheduler delay from 15.6ms to 0.50ms", switchTimer));
 
             switchInterrupt = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Interrupt Moderation (Off)", "Immediate CPU interrupt on packet arrival (no batching)", switchInterrupt));
+            list.Children.Add(CreateTuningRow("Disable Interrupt Moderation", "Immediate CPU interrupt on packet arrival (no batching)", switchInterrupt));
 
             switchRss = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Receive Side Scaling (RSS)", "Distributes packet queues across CPU cores to avoid Core 0 bottleneck", switchRss));
+            list.Children.Add(CreateTuningRow("Enable Receive Side Scaling (RSS)", "Distributes packet queues across CPU cores to avoid Core 0 bottleneck", switchRss));
 
             switchLso = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Large Send Offload (Off)", "Disables hardware packet chunking to eliminate driver stalls", switchLso));
+            list.Children.Add(CreateTuningRow("Disable Large Send Offload (LSO)", "Disables hardware packet chunking to eliminate driver stalls", switchLso));
 
             switchFlow = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Flow Control (Off)", "Prevents Ethernet PAUSE frames from blocking transmit queue", switchFlow));
+            list.Children.Add(CreateTuningRow("Disable Flow Control", "Prevents Ethernet PAUSE frames from blocking transmit queue", switchFlow));
 
             switchThrottle = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Network Throttling Index (Off)", "Removes Windows 10-packet/ms multimedia limit", switchThrottle));
+            list.Children.Add(CreateTuningRow("Disable Network Throttling", "Removes Windows 10-packet/ms multimedia limit", switchThrottle));
 
             switchNagle = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("TCP NoDelay & AckFrequency", "Immediate ACK for Roblox meshes, textures, and sounds", switchNagle));
+            list.Children.Add(CreateTuningRow("Enable TCP NoDelay & Immediate ACK", "Immediate ACK for Roblox meshes, textures, and sounds", switchNagle));
 
             switchEee = new AnimatedToggleSwitch(true);
-            list.Children.Add(CreateTuningRow("Energy Efficient Ethernet (Off)", "Prevents adapter sleep delays on wired connections", switchEee));
+            list.Children.Add(CreateTuningRow("Disable Energy Efficient Ethernet", "Prevents adapter sleep delays on wired connections", switchEee));
 
             scroll.Content = list;
             card.Child = scroll;
             grid.Children.Add(card);
 
-            // Action Buttons Footer
+            // Docked Action Buttons Footer Bar
+            Border footerBar = new Border();
+            Grid.SetRow(footerBar, 1);
+            footerBar.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+            footerBar.BorderThickness = new Thickness(0, 1, 0, 0);
+            footerBar.Padding = new Thickness(0, 10, 0, 0);
+            footerBar.Margin = new Thickness(0, 6, 0, 0);
+
+            Grid footGrid = new Grid();
+            footGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+            footGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
             StackPanel actions = new StackPanel();
-            Grid.SetRow(actions, 1);
-            actions.Margin = new Thickness(0, 12, 0, 0);
             actions.Orientation = Orientation.Horizontal;
             actions.VerticalAlignment = VerticalAlignment.Center;
 
@@ -1310,6 +1345,7 @@ namespace RobloxNetworkTuner
             actions.Children.Add(btnReapply);
             actions.Children.Add(btnRestore);
             actions.Children.Add(btnQuickBb);
+            footGrid.Children.Add(actions);
 
             txtBufferbloatQuickStatus = new TextBlock
             {
@@ -1317,11 +1353,14 @@ namespace RobloxNetworkTuner
                 FontSize = 10.5,
                 Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)),
                 VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(14, 0, 0, 0)
             };
-            actions.Children.Add(txtBufferbloatQuickStatus);
+            Grid.SetColumn(txtBufferbloatQuickStatus, 1);
+            footGrid.Children.Add(txtBufferbloatQuickStatus);
 
-            grid.Children.Add(actions);
+            footerBar.Child = footGrid;
+            grid.Children.Add(footerBar);
             return grid;
         }
 
@@ -1340,7 +1379,7 @@ namespace RobloxNetworkTuner
             StackPanel sp = new StackPanel();
             sp.VerticalAlignment = VerticalAlignment.Center;
             TextBlock t = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White) };
-            TextBlock s = new TextBlock { Text = subtitle, FontSize = 9.5, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 1, 0, 0) };
+            TextBlock s = new TextBlock { Text = subtitle, FontSize = 11.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 2, 0, 0) };
             sp.Children.Add(t);
             sp.Children.Add(s);
             row.Children.Add(sp);
@@ -1455,8 +1494,18 @@ namespace RobloxNetworkTuner
             bbTxt.VerticalAlignment = VerticalAlignment.Center;
             TextBlock bbHead = new TextBlock { Text = "BUFFERBLOAT DIAGNOSTIC", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) };
             txtStatBufferbloat = new TextBlock { Text = bufferbloatResultText, FontSize = 11.5, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 4, 0, 0) };
+            txtStatBufferbloatAdvice = new TextBlock
+            {
+                Text = "",
+                FontSize = 10.5,
+                Foreground = new SolidColorBrush(Color.FromRgb(251, 191, 36)),
+                Margin = new Thickness(0, 3, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+                Visibility = Visibility.Collapsed
+            };
             bbTxt.Children.Add(bbHead);
             bbTxt.Children.Add(txtStatBufferbloat);
+            bbTxt.Children.Add(txtStatBufferbloatAdvice);
             bbg.Children.Add(bbTxt);
 
             btnRunBufferbloat = ModernButton.CreateAction("Run Test", Color.FromRgb(52, 211, 153), 36);
@@ -1499,9 +1548,12 @@ namespace RobloxNetworkTuner
         private Grid BuildSettingsView()
         {
             Grid grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(112) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(118) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            // Left Column: StackPanel with About and Updates cards
+            StackPanel leftPanel = new StackPanel();
 
             // Card 1: About
             Border aboutCard = new Border();
@@ -1510,34 +1562,33 @@ namespace RobloxNetworkTuner
             aboutCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             aboutCard.BorderThickness = new Thickness(1);
 
-            StackPanel aboutStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            StackPanel aboutStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
             aboutStack.Children.Add(new TextBlock { Text = "ABOUT", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
-            aboutStack.Children.Add(new TextBlock { Text = "Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 3, 0, 1) });
-            aboutStack.Children.Add(new TextBlock { Text = "Low-latency network and scheduler optimization for competitive Roblox gameplay.", FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)) });
+            aboutStack.Children.Add(new TextBlock { Text = "Roblox Network Tuner v" + GitHubUpdateModule.CurrentVersion + " by getsentrix", FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 4, 0, 2) });
+            aboutStack.Children.Add(new TextBlock { Text = "Low-latency network and scheduler optimization for competitive Roblox gameplay.", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), TextWrapping = TextWrapping.Wrap });
 
             ModernButton btnGh = ModernButton.CreateAction("Open GitHub Repository", Color.FromRgb(56, 189, 248), 34);
             btnGh.HorizontalAlignment = HorizontalAlignment.Left;
-            btnGh.Margin = new Thickness(0, 8, 0, 0);
+            btnGh.Margin = new Thickness(0, 10, 0, 0);
             btnGh.Click += delegate
             {
                 try { Process.Start("https://github.com/getsentrix/RBLX-Network-Tuner"); } catch { }
             };
             aboutStack.Children.Add(btnGh);
             aboutCard.Child = aboutStack;
-            grid.Children.Add(aboutCard);
+            leftPanel.Children.Add(aboutCard);
 
             // Card 2: Updates
             Border upCard = new Border();
-            Grid.SetRow(upCard, 1);
-            upCard.Margin = new Thickness(0, 10, 0, 10);
+            upCard.Margin = new Thickness(0, 14, 0, 0);
             upCard.CornerRadius = new CornerRadius(10);
             upCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             upCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             upCard.BorderThickness = new Thickness(1);
 
-            StackPanel upStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            StackPanel upStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
             upStack.Children.Add(new TextBlock { Text = "AUTO-UPDATE ENGINE", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
-            txtUpdateInfo = new TextBlock { Text = "Automatic GitHub releases check active.", FontSize = 11, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 3, 0, 8) };
+            txtUpdateInfo = new TextBlock { Text = "Automatic GitHub releases check active.", FontSize = 11, Foreground = new SolidColorBrush(Colors.White), Margin = new Thickness(0, 4, 0, 10), TextWrapping = TextWrapping.Wrap };
             upStack.Children.Add(txtUpdateInfo);
 
             btnCheckUpdate = ModernButton.CreateAction("Check for Updates", Color.FromRgb(52, 211, 153), 34);
@@ -1545,19 +1596,22 @@ namespace RobloxNetworkTuner
             btnCheckUpdate.Click += delegate { TriggerUpdateCheckAsync(true); };
             upStack.Children.Add(btnCheckUpdate);
             upCard.Child = upStack;
-            grid.Children.Add(upCard);
+            leftPanel.Children.Add(upCard);
 
-            // Card 3: Safety & Rollback
+            Grid.SetColumn(leftPanel, 0);
+            grid.Children.Add(leftPanel);
+
+            // Right Column: Safety & Rollback Card
             Border safeCard = new Border();
-            Grid.SetRow(safeCard, 2);
+            Grid.SetColumn(safeCard, 2);
             safeCard.CornerRadius = new CornerRadius(10);
             safeCard.Background = new SolidColorBrush(Color.FromRgb(13, 17, 26));
             safeCard.BorderBrush = new SolidColorBrush(Color.FromRgb(30, 41, 59));
             safeCard.BorderThickness = new Thickness(1);
 
-            StackPanel safeStack = new StackPanel { Margin = new Thickness(18, 12, 18, 12) };
+            StackPanel safeStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
             safeStack.Children.Add(new TextBlock { Text = "SAFETY & CRASH RECOVERY", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
-            safeStack.Children.Add(new TextBlock { Text = "Every modified registry key, QoS policy, timer resolution, and adapter setting is guaranteed to restore to defaults when Roblox exits or upon closing.", FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 3, 0, 10) });
+            safeStack.Children.Add(new TextBlock { Text = "Every modified registry key, QoS policy, timer resolution, and adapter setting is guaranteed to restore to defaults when Roblox exits or upon closing.", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)), Margin = new Thickness(0, 4, 0, 14), TextWrapping = TextWrapping.Wrap });
 
             StackPanel safeBtns = new StackPanel { Orientation = Orientation.Horizontal };
             ModernButton btnVer = ModernButton.CreateAction("Verify Restoration", Color.FromRgb(56, 189, 248), 34);
@@ -1945,7 +1999,16 @@ namespace RobloxNetworkTuner
                 this.Dispatcher.BeginInvoke(new Action(delegate
                 {
                     txtOptTitle.Text = "Not Optimized";
+                    txtOptTitle.Foreground = new SolidColorBrush(Colors.White);
+                    txtOptSub.Text = "Stock Windows network configuration active";
                     btnTuneNow.Text = "TUNE NOW";
+                    if (statusCheckIcon != null) statusCheckIcon.Text = "⚡";
+                    if (statusCircle != null)
+                    {
+                        WpfAnimationHelper.AnimateBorderBrush(statusCircle, Color.FromRgb(51, 65, 85), 200);
+                        statusCircle.Background = new SolidColorBrush(Color.FromRgb(18, 24, 38));
+                    }
+                    if (statusCard != null) WpfAnimationHelper.AnimateBorderBrush(statusCard, Color.FromRgb(30, 41, 59), 300);
                 }));
             });
         }
@@ -1957,15 +2020,21 @@ namespace RobloxNetworkTuner
             bufferbloatResultText = "Testing bufferbloat (5MB burst)...";
             if (txtBufferbloatQuickStatus != null) txtBufferbloatQuickStatus.Text = bufferbloatResultText;
             if (txtStatBufferbloat != null) txtStatBufferbloat.Text = bufferbloatResultText;
+            if (txtStatBufferbloatAdvice != null) txtStatBufferbloatAdvice.Visibility = Visibility.Collapsed;
 
             ThreadPool.QueueUserWorkItem(delegate
             {
+                string adviceText = null;
                 try
                 {
                     BufferbloatResult res = BufferbloatDiagnosticModule.RunTest(liveTarget, null);
                     if (res.Success)
                     {
                         bufferbloatResultText = string.Format("Idle: {0:F1}ms | Loaded: {1:F1}ms (+{2:F1}ms) - Grade {3}", res.IdleRttMs, res.LoadedRttMs, res.DeltaRttMs, res.Grade);
+                        if (res.DeltaRttMs > 15.0)
+                        {
+                            adviceText = "Router SQM (CAKE / FQ-CoDel) recommended to eliminate packet queuing under load.";
+                        }
                     }
                     else
                     {
@@ -1982,6 +2051,18 @@ namespace RobloxNetworkTuner
                     isBufferbloatRunning = false;
                     if (txtBufferbloatQuickStatus != null) txtBufferbloatQuickStatus.Text = bufferbloatResultText;
                     if (txtStatBufferbloat != null) txtStatBufferbloat.Text = bufferbloatResultText;
+                    if (txtStatBufferbloatAdvice != null)
+                    {
+                        if (!string.IsNullOrEmpty(adviceText))
+                        {
+                            txtStatBufferbloatAdvice.Text = adviceText;
+                            txtStatBufferbloatAdvice.Visibility = Visibility.Visible;
+                        }
+                        else
+                        {
+                            txtStatBufferbloatAdvice.Visibility = Visibility.Collapsed;
+                        }
+                    }
                 }));
             });
         }

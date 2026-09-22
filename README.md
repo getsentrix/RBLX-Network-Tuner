@@ -74,6 +74,12 @@ Get the latest release from the **[Releases Page](https://github.com/getsentrix/
 | **`RobloxNetworkTunerSetup.exe`** | Installer | One-click setup. Creates Start Menu and Desktop shortcuts, adds clean uninstaller. |
 | **`RobloxNetworkTuner.exe`** | Portable | Standalone executable. No installation needed, runs directly as administrator. |
 
+### Windows Package Manager (winget)
+
+```cmd
+winget install getsentrix.RobloxNetworkTuner
+```
+
 ---
 
 ## How to Use
